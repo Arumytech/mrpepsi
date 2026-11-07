@@ -1,0 +1,27 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /mrpepsi/
+
+    # Handle Directory Index
+    DirectoryIndex index.php
+
+    # If the requested file or directory exists, serve it directly
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Otherwise forward the request to index.php
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# PWA: MIME type untuk web app manifest
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
+# Service worker tidak boleh di-cache lama
+<IfModule mod_headers.c>
+    <FilesMatch "sw\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Service-Worker-Allowed "/mrpepsi/"
+    </FilesMatch>
+</IfModule>

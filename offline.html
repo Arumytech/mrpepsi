@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - MR.PEPSI UPGRADE</title>
+    <meta name="theme-color" content="#12131A">
+    <link rel="manifest" href="manifest.webmanifest">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #12131A;
+            color: #fff;
+            text-align: center;
+        }
+        .card { max-width: 420px; }
+        .badge {
+            width: 84px;
+            height: 84px;
+            border-radius: 24px;
+            background: #fff;
+            display: grid;
+            place-items: center;
+            margin: 0 auto 24px;
+            padding: 14px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, .45);
+        }
+        .badge img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        h1 { font-size: 22px; margin: 0 0 10px; }
+        p { color: #b6bac6; line-height: 1.6; margin: 0 0 24px; font-size: 15px; }
+        button {
+            border: 0;
+            background: #E3262E;
+            color: #fff;
+            font-weight: 800;
+            font-size: 15px;
+            padding: 14px 28px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: transform .15s ease, background .15s ease;
+        }
+        button:hover { background: #c81f27; }
+        button:active { transform: scale(.96); }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="badge"><img src="icons/icon-192.png" alt="MR.PEPSI UPGRADE"></div>
+        <h1>Kamu Sedang Offline</h1>
+        <p>Koneksi internet tidak tersedia. Periksa jaringan kamu lalu coba muat ulang halaman.</p>
+        <button onclick="location.reload()">Coba Lagi</button>
+    </div>
+</body>
+
+</html>

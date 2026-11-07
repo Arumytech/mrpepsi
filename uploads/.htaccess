@@ -1,0 +1,12 @@
+Options -Indexes
+
+# Eksekusi script dilarang keras di folder upload
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<FilesMatch "(?i)\.(php|phtml|phar|php\d|pl|py|cgi|sh|htaccess)$">
+    Require all denied
+</FilesMatch>

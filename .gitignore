@@ -1,0 +1,16 @@
+# Temporary / local runtime files
+cookie.txt
+scratch_reg.json
+*.bak
+*.log
+
+# Backups & scratch
+bakup/
+scratch/
+
+# OS / Editor files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
