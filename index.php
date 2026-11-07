@@ -4,7 +4,9 @@
  * Native PHP Clean MVC Architecture (Tanpa .env)
  */
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Load Configuration
 require_once __DIR__ . '/config/config.php';
@@ -209,12 +211,17 @@ $router->post('/admin/expenses/delete-category/{id}', [ExpenseController::class,
 $router->get('/admin/expenses/report', [ExpenseController::class, 'report']);
 $router->get('/admin/expenses/report/pdf', [ExpenseController::class, 'reportPdf']);
 
-// Pengaturan Umum
+// Pengaturan Umum & Pembaruan Sistem
 $router->get('/admin/settings', [SettingController::class, 'index']);
 $router->post('/admin/settings/update', [SettingController::class, 'update']);
 $router->post('/admin/settings/pos-close', [SettingController::class, 'posClose']);
 $router->post('/admin/settings/pos-open', [SettingController::class, 'posOpen']);
 $router->get('/admin/pos-control', [SettingController::class, 'posControl']);
+$router->get('/admin/settings/check-update', [SettingController::class, 'checkUpdate']);
+$router->post('/admin/settings/check-update', [SettingController::class, 'checkUpdate']);
+$router->post('/admin/settings/apply-update', [SettingController::class, 'applyUpdate']);
+$router->post('/admin/settings/backup', [SettingController::class, 'createBackup']);
+$router->get('/admin/settings/download-backup/{file}', [SettingController::class, 'downloadBackup']);
 
 // Manajemen User & Akun (Admin / Kasir)
 $router->get('/admin/users', [UserController::class, 'index']);

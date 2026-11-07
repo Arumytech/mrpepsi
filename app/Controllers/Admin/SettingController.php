@@ -13,10 +13,16 @@ class SettingController extends Controller {
 
         $settings = $settingModel->getAllKeyValue();
         $periods = $periodModel->all('ABS(DATEDIFF(start_date, CURDATE())) ASC');
+        $gitInfo = \App\Core\Updater::getGitInfo();
+        $backups = \App\Core\Updater::listBackups();
+        $appVersion = \App\Core\Updater::getCurrentVersion();
 
         $this->view('admin.settings.index', [
-            'settings' => $settings,
-            'periods' => $periods
+            'settings'   => $settings,
+            'periods'    => $periods,
+            'gitInfo'    => $gitInfo,
+            'backups'    => $backups,
+            'appVersion' => $appVersion,
         ], 'admin');
     }
 
@@ -213,5 +219,85 @@ class SettingController extends Controller {
         if (is_file($absolute)) {
             @unlink($absolute);
         }
+    }
+
+    /**
+     * Cek pembaruan dari remote repository GitHub.
+     */
+    public function checkUpdate(): void {
+        $this->requireAuth(['admin']);
+        $result = \App\Core\Updater::checkRemoteUpdate();
+
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            $this->json($result);
+            return;
+        }
+
+        if (!empty($result['error'])) {
+            $this->setFlash('error', $result['error']);
+        } elseif (!empty($result['has_update'])) {
+            $this->setFlash('success', $result['message']);
+        } else {
+            $this->setFlash('success', $result['message'] ?? 'Aplikasi sudah versi terbaru.');
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
+
+    /**
+     * Terapkan pembaruan: Buat backup zip otomatis -> Pull/replace dari GitHub -> Auto-migrate DB.
+     */
+    public function applyUpdate(): void {
+        $this->requireAuth(['admin']);
+        $result = \App\Core\Updater::applyUpdate();
+
+        if ($result['success']) {
+            $this->setFlash('success', $result['message']);
+        } else {
+            $this->setFlash('error', $result['message']);
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
+
+    /**
+     * Buat cadangan (backup) manual dari tombol di halaman pengaturan.
+     */
+    public function createBackup(): void {
+        $this->requireAuth(['admin']);
+        $result = \App\Core\Updater::createBackup('manual');
+
+        if ($result['success']) {
+            $this->setFlash('success', "Cadangan (Backup) berhasil dibuat: {$result['filename']} ({$result['size']}) di folder bakup/.");
+        } else {
+            $this->setFlash('error', "Gagal membuat cadangan: " . ($result['error'] ?? 'Terjadi kesalahan.'));
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
+
+    /**
+     * Download file zip backup yang tersimpan di folder `bakup/`.
+     */
+    public function downloadBackup(string $file): void {
+        $this->requireAuth(['admin']);
+        $filename = basename($file);
+        $filePath = BASE_PATH . '/bakup/' . $filename;
+
+        if (!file_exists($filePath) || strtolower(substr($filename, -4)) !== '.zip') {
+            $this->setFlash('error', 'File cadangan tidak ditemukan atau format tidak valid.');
+            $this->redirect('admin/settings#update-section');
+            return;
+        }
+
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($filePath));
+        readfile($filePath);
+        exit;
     }
 }

@@ -24,6 +24,7 @@ define('DB_PASS', '');
 define('APP_NAME', 'MR.PEPSI UPGRADE');
 define('APP_TAGLINE', 'Kursus Speaking & IELTS di Kampung Inggris Pare');
 define('ADMIN_PHONE', '6285648077008');
+define('APP_VERSION', '1.0.0');
 
 // Base URL detection
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || ($_SERVER['SERVER_PORT'] ?? 80) == 443) ? "https://" : "http://";

@@ -255,6 +255,124 @@
         </div>
     </div>
 
+    <!-- Pembaruan Aplikasi & Cadangan Data -->
+    <div id="update-section" class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 max-w-3xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-pepsi-blue/10 text-pepsi-blue grid place-items-center text-sm font-black">
+                        ⚡
+                    </span>
+                    <h2 class="font-heading font-black text-lg text-pepsi-navy">Pembaruan Aplikasi &amp; Cadangan Data</h2>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">
+                    Cek pembaruan aplikasi secara berkala, buat cadangan (backup) otomatis, dan perbarui file sistem tanpa perlu import database manual.
+                </p>
+            </div>
+            <div class="shrink-0 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs font-mono font-bold text-slate-700">v<?= sanitize($appVersion ?? '1.0.0') ?></span>
+            </div>
+        </div>
+
+        <!-- Info Status Versi & Git Lokal -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Versi / Commit Aktif</span>
+                <div class="flex items-center gap-2">
+                    <code class="font-mono font-bold text-pepsi-blue bg-white px-2 py-0.5 rounded-lg border border-slate-200 text-xs">
+                        <?= sanitize($gitInfo['commit'] ?? '-') ?>
+                    </code>
+                    <span class="text-slate-500 text-[11px]">(Branch: <?= sanitize($gitInfo['branch'] ?? 'main') ?>)</span>
+                </div>
+                <span class="text-[11px] text-slate-500 block truncate" title="<?= sanitize($gitInfo['message'] ?? '-') ?>">
+                    <?= sanitize($gitInfo['message'] ?? '-') ?>
+                </span>
+            </div>
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                <span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Terakhir Diperbarui</span>
+                <span class="font-bold text-slate-700 block text-xs"><?= sanitize($gitInfo['date'] ?? '-') ?></span>
+                <span class="text-[11px] text-slate-400 block truncate">Folder: <?= sanitize(BASE_PATH) ?></span>
+            </div>
+        </div>
+
+        <!-- Kotak Pengecekan & Tombol Aksi Update -->
+        <div class="p-5 rounded-2xl border border-blue-100 bg-blue-50/50 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-xs sm:text-sm">Status Pembaruan Aplikasi</h3>
+                    <p id="update-status-text" class="text-xs text-slate-600 mt-0.5">
+                        Klik tombol di bawah untuk memeriksa apakah terdapat rilis pembaruan baru untuk aplikasi.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btn-check-update" class="px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs shadow-sm flex items-center gap-2 transition cursor-pointer">
+                        <span id="check-icon">🔄</span> Cek Pembaruan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Area Hasil Cek Update (Dinamis) -->
+            <div id="update-result-box" class="hidden p-4 rounded-xl border text-xs space-y-3">
+                <!-- Diisi via JS -->
+            </div>
+
+            <!-- Tombol Update Utama -->
+            <div class="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-blue-100">
+                <form action="<?= url('admin/settings/apply-update') ?>" method="POST" class="w-full sm:w-auto"
+                      onsubmit="return confirm('Mulai proses pembaruan aplikasi?\n\n1. Sistem akan OTOMATIS mencadangkan (backup) seluruh file proyek + database ke folder bakup/.\n2. Kode aplikasi akan diperbarui (replace) ke versi terbaru.\n3. Skema dan seeder database akan otomatis disinkronkan.\n\nApakah Anda yakin ingin melanjutkan?')">
+                    <button type="submit" id="btn-apply-update" class="w-full sm:w-auto px-6 py-3 bg-pepsi-blue hover:bg-blue-900 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-xs cursor-pointer">
+                        <span>🚀</span> Update Sekarang (Backup &amp; Replace)
+                    </button>
+                </form>
+
+                <form action="<?= url('admin/settings/backup') ?>" method="POST" class="w-full sm:w-auto">
+                    <button type="submit" class="w-full sm:w-auto px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold rounded-2xl shadow-sm transition text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                        <span>💾</span> Buat Cadangan (Backup Manual)
+                    </button>
+                </form>
+            </div>
+            <p class="text-[11px] text-slate-500">
+                * Sebelum pembaruan berjalan, file ZIP cadangan berisi seluruh kode dan database akan dibuat terlebih dahulu secara otomatis ke folder <code class="font-mono bg-white px-1 py-0.5 rounded border border-slate-200">bakup/</code>.
+            </p>
+        </div>
+
+        <!-- Daftar Riwayat Cadangan (Backup Files) -->
+        <div class="space-y-3 pt-2">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 text-xs">Riwayat File Cadangan (Folder: /bakup)</h3>
+                <span class="text-[11px] text-slate-400"><?= count($backups ?? []) ?> file cadangan</span>
+            </div>
+
+            <?php if (empty($backups)): ?>
+                <div class="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                    Belum ada file cadangan (backup). Cadangan otomatis akan dibuat setiap kali Anda melakukan update.
+                </div>
+            <?php else: ?>
+                <div class="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden text-xs bg-slate-50/50">
+                    <?php foreach (array_slice($backups, 0, 5) as $b): ?>
+                    <div class="p-3 bg-white flex items-center justify-between gap-3 hover:bg-slate-50 transition">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-base">📦</span>
+                            <div class="min-w-0">
+                                <span class="font-mono font-bold text-slate-800 block truncate text-xs" title="<?= sanitize($b['filename']) ?>">
+                                    <?= sanitize($b['filename']) ?>
+                                </span>
+                                <span class="text-[11px] text-slate-400 block">
+                                    <?= sanitize($b['date']) ?> &bull; <?= sanitize($b['size']) ?>
+                                </span>
+                            </div>
+                        </div>
+                        <a href="<?= url('admin/settings/download-backup/' . urlencode($b['filename'])) ?>" class="shrink-0 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] transition">
+                            Unduh ZIP &darr;
+                        </a>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -325,5 +443,66 @@
     fmt.addEventListener('input', render);
     if (digits) digits.addEventListener('input', render);
     render();
+})();
+
+(function () {
+    var btn = document.getElementById('btn-check-update');
+    var statusText = document.getElementById('update-status-text');
+    var resultBox = document.getElementById('update-result-box');
+    var checkIcon = document.getElementById('check-icon');
+    if (!btn || !resultBox) return;
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-not-allowed');
+        checkIcon.classList.add('animate-spin');
+        statusText.textContent = 'Memeriksa pembaruan aplikasi...';
+        resultBox.classList.add('hidden');
+
+        fetch('<?= url('admin/settings/check-update') ?>', {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            checkIcon.classList.remove('animate-spin');
+            resultBox.classList.remove('hidden');
+
+            if (data.error) {
+                resultBox.className = 'p-4 rounded-xl border bg-amber-50 border-amber-200 text-amber-800 text-xs space-y-1';
+                resultBox.innerHTML = '<span class="font-bold block text-amber-900">⚠️ Informasi Pengecekan</span><p>' + (data.error || 'Gagal memeriksa server pembaruan') + '</p>';
+                statusText.textContent = 'Gagal memeriksa pembaruan.';
+            } else if (data.has_update) {
+                resultBox.className = 'p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800 text-xs space-y-2';
+                var commitsHtml = '';
+                if (data.commits && data.commits.length) {
+                    commitsHtml = '<ul class="list-disc list-inside space-y-0.5 text-[11px] text-emerald-900 font-mono mt-1 bg-white/60 p-2.5 rounded-lg border border-emerald-100">' +
+                        data.commits.map(function(c) { return '<li>' + c + '</li>'; }).join('') +
+                        '</ul>';
+                }
+                resultBox.innerHTML = '<span class="font-bold text-sm block text-emerald-900">🎉 Pembaruan Baru Tersedia! (' + data.count + ' rilis baru)</span>' +
+                    '<p class="text-xs">Versi / Commit terbaru: <code class="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">' + (data.remote_commit || '-') + '</code></p>' +
+                    commitsHtml +
+                    '<p class="text-[11px] font-semibold text-emerald-700 pt-1">👉 Klik tombol <strong>"Update Sekarang"</strong> di bawah untuk mencadangkan file dan menerapkan pembaruan.</p>';
+                statusText.textContent = 'Terdapat ' + data.count + ' pembaruan baru.';
+            } else {
+                resultBox.className = 'p-4 rounded-xl border bg-slate-50 border-slate-200 text-slate-700 text-xs';
+                resultBox.innerHTML = '<span class="font-bold block text-emerald-700">✓ Sistem Sudah Terkini</span><p class="text-xs text-slate-600 mt-0.5">' + (data.message || 'Tidak ada pembaruan baru.') + '</p>';
+                statusText.textContent = 'Aplikasi Anda sudah versi paling baru.';
+            }
+        })
+        .catch(function (err) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            checkIcon.classList.remove('animate-spin');
+            resultBox.classList.remove('hidden');
+            resultBox.className = 'p-4 rounded-xl border bg-red-50 border-red-200 text-red-800 text-xs';
+            resultBox.innerHTML = '<span class="font-bold block text-red-900">❌ Terjadi Kesalahan</span><p class="text-xs">Gagal melakukan pengecekan: ' + err.message + '</p>';
+            statusText.textContent = 'Gagal memeriksa pembaruan.';
+        });
+    });
 })();
 </script>

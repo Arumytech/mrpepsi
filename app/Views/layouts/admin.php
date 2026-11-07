@@ -419,8 +419,82 @@
                 </a>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2.5 sm:gap-3">
                 <span class="text-xs font-bold text-slate-500 hidden sm:inline"><?= date('l, d F Y') ?></span>
+
+                <!-- Tombol & Popup Cek Update Aplikasi -->
+                <div class="relative" x-data="topbarUpdateChecker()">
+                    <button type="button" @click="toggleCheck()" :disabled="loading"
+                            title="Cek Pembaruan Aplikasi"
+                            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-slate-600 hover:text-pepsi-blue transition text-xs font-semibold shadow-sm cursor-pointer">
+                        <svg :class="{'animate-spin text-pepsi-blue': loading}" class="w-3.5 h-3.5 text-slate-500 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span class="hidden md:inline text-[11px] font-bold">Cek Update</span>
+                        <span class="w-2 h-2 rounded-full" :class="hasUpdate ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'"></span>
+                    </button>
+
+                    <!-- Popup Dropdown Hasil Cek Update -->
+                    <div x-show="showPopup" x-cloak @click.away="showPopup = false"
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0 translate-y-1 scale-95"
+                         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                         x-transition:leave="transition ease-in duration-100"
+                         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                         x-transition:leave-end="opacity-0 translate-y-1 scale-95"
+                         class="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 text-xs space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm">⚡</span>
+                                <span class="font-bold text-slate-800 text-xs">Pembaruan Aplikasi</span>
+                            </div>
+                            <button type="button" @click="showPopup = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">✕</button>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div x-show="loading" class="py-4 text-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-pepsi-blue border-t-transparent rounded-full animate-spin mx-auto"></div>
+                            <span class="text-slate-500 text-[11px] block">Memeriksa pembaruan aplikasi...</span>
+                        </div>
+
+                        <!-- Hasil Cek State -->
+                        <div x-show="!loading && result" class="space-y-2.5">
+                            <!-- Bila ada update -->
+                            <template x-if="result && result.has_update">
+                                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-emerald-900">
+                                    <span class="font-bold block text-xs">🎉 Pembaruan Baru Tersedia!</span>
+                                    <p class="text-[11px]" x-text="result.message"></p>
+                                    <a href="<?= url('admin/settings#update-section') ?>" class="block text-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition">
+                                        Buka Pengaturan &amp; Update &rarr;
+                                    </a>
+                                </div>
+                            </template>
+
+                            <!-- Bila sudah up to date -->
+                            <template x-if="result && !result.has_update && !result.error">
+                                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-700">
+                                    <div class="flex items-center gap-1.5 text-emerald-700 font-bold">
+                                        <span>✓</span>
+                                        <span>Sistem Sudah Paling Baru</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-500" x-text="result.message"></p>
+                                    <a href="<?= url('admin/settings#update-section') ?>" class="block text-[11px] font-bold text-pepsi-blue hover:underline pt-1">
+                                        Kelola Cadangan &amp; Versi &rarr;
+                                    </a>
+                                </div>
+                            </template>
+
+                            <!-- Bila error -->
+                            <template x-if="result && result.error">
+                                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-amber-900">
+                                    <span class="font-bold block text-xs">⚠️ Info Pengecekan</span>
+                                    <p class="text-[11px]" x-text="result.error"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
                 <a href="<?= url('pos') ?>" target="_blank" class="px-3.5 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition">
                     <span>Kasir POS</span>
                 </a>
@@ -453,6 +527,45 @@
             <?= $content ?>
         </main>
     </div>
+
+    <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('topbarUpdateChecker', () => ({
+            loading: false,
+            showPopup: false,
+            hasUpdate: false,
+            result: null,
+            toggleCheck() {
+                if (this.showPopup && this.result) {
+                    this.runCheck();
+                } else {
+                    this.showPopup = true;
+                    if (!this.result) {
+                        this.runCheck();
+                    }
+                }
+            },
+            runCheck() {
+                this.loading = true;
+                fetch('<?= url('admin/settings/check-update') ?>', {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    this.loading = false;
+                    this.result = data;
+                    this.hasUpdate = Boolean(data && data.has_update);
+                })
+                .catch(err => {
+                    this.loading = false;
+                    this.result = { error: 'Gagal terhubung ke server: ' + err.message };
+                });
+            }
+        }));
+    });
+    </script>
 
     <?php require __DIR__ . '/../partials/pwa_script.php'; ?>
 
