@@ -208,8 +208,8 @@ $formattedDateId = str_replace(array_keys($bulanId), array_values($bulanId), $fo
         .overlay-nonkid .program-info .row-date {
             color: #4a360f;      /* nomor sertifikat (#6b4e1a), dibuat lebih gelap */
             position: relative;
-            left: 265px;         /* digeser ke kanan */
-            top: 22px;           /* digeser sedikit ke bawah */
+            left: 280px;         /* digeser ke kanan agar lurus seimbang dengan nama FIPSI */
+            top: 22px;           /* posisi vertikal */
         }
 
         /* ═══════════════════════════════════
@@ -354,7 +354,7 @@ $formattedDateId = str_replace(array_keys($bulanId), array_values($bulanId), $fo
                 <div class="row"><span class="lbl">PROGRAM</span> : <?= sanitize($grad['program_title']) ?></div>
                 <div class="row"><span class="lbl">LEVEL</span> : <?= sanitize($grad['program_level'] ?? '') ?></div>
                 <div class="row"><span class="lbl">Result</span> : <?= sanitize($grade) ?></div>
-                <div class="row row-date">PARE, <?= $formattedDateId ?></div>
+                <div class="row row-date">PARE,&nbsp; <?= $formattedDateId ?></div>
             </div>
             <?php else: ?>
 
