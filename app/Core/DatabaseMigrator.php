@@ -614,39 +614,45 @@ class DatabaseMigrator {
         }
         $log("Default settings seeded.");
 
-        // 3f. Rooms
-        $rooms = [
-            ['Alpha', 'indoor'],
-            ['Bravo', 'indoor'],
-            ['Charlie', 'indoor'],
-            ['Deluxe', 'indoor'],
-            ['Gazebo', 'outdoor'],
-            ['Romeo', 'indoor'],
-        ];
-        $rmStmt = $pdo->prepare("INSERT IGNORE INTO `rooms` (`name`, `capacity`, `area_type`, `description`) VALUES (?, ?, ?, ?)");
-        foreach ($rooms as $r) {
-            $rmStmt->execute([$r[0], 15, $r[1], "Ruang {$r[0]} nyaman"]);
+        // 3f. Rooms (Hanya jika belum ada ruangan sama sekali)
+        $roomCount = (int)$pdo->query("SELECT COUNT(*) FROM `rooms`")->fetchColumn();
+        if ($roomCount === 0) {
+            $rooms = [
+                ['Alpha', 'indoor'],
+                ['Bravo', 'indoor'],
+                ['Charlie', 'indoor'],
+                ['Deluxe', 'indoor'],
+                ['Gazebo', 'outdoor'],
+                ['Romeo', 'indoor'],
+            ];
+            $rmStmt = $pdo->prepare("INSERT IGNORE INTO `rooms` (`name`, `capacity`, `area_type`, `description`) VALUES (?, ?, ?, ?)");
+            foreach ($rooms as $r) {
+                $rmStmt->execute([$r[0], 15, $r[1], "Ruang {$r[0]} nyaman"]);
+            }
+            $log("Default rooms seeded.");
         }
-        $log("Default rooms seeded.");
 
-        // 3g. Tutors
-        $coaches = [
-            ['name' => 'Aprul', 'specialization' => 'Speaking Basic & Confidence', 'fee' => 40000],
-            ['name' => 'Arul', 'specialization' => 'IELTS Mock Up & Speaking', 'fee' => 45000],
-            ['name' => 'Annisa', 'specialization' => 'Impromptu & Fluency', 'fee' => 40000],
-            ['name' => 'Khansa', 'specialization' => 'Grammar for Speaking', 'fee' => 40000],
-            ['name' => 'Isna', 'specialization' => 'Snap Chat & Modern Tests', 'fee' => 42000],
-            ['name' => 'Clarissa', 'specialization' => 'Public Speaking & Presentation', 'fee' => 42000],
-            ['name' => 'Nabila', 'specialization' => 'Active Speaking & Debates', 'fee' => 42000],
-            ['name' => 'Pepsi', 'specialization' => 'Head Coach - IELTS Specialist', 'fee' => 50000],
-            ['name' => 'Dhani', 'specialization' => 'IELTS General Training', 'fee' => 45000],
-            ['name' => 'Anugrah', 'specialization' => 'Job Interview & Career English', 'fee' => 45000],
-        ];
-        $tutStmt = $pdo->prepare("INSERT IGNORE INTO `tutors` (`name`, `phone`, `specialization`, `fee_per_session`) VALUES (?, ?, ?, ?)");
-        foreach ($coaches as $c) {
-            $tutStmt->execute([$c['name'], '0856' . rand(1000000, 9999999), $c['specialization'], $c['fee']]);
+        // 3g. Tutors (Hanya jika belum ada tutor sama sekali)
+        $tutorCount = (int)$pdo->query("SELECT COUNT(*) FROM `tutors`")->fetchColumn();
+        if ($tutorCount === 0) {
+            $coaches = [
+                ['name' => 'Aprul', 'specialization' => 'Speaking Basic & Confidence', 'fee' => 40000],
+                ['name' => 'Arul', 'specialization' => 'IELTS Mock Up & Speaking', 'fee' => 45000],
+                ['name' => 'Annisa', 'specialization' => 'Impromptu & Fluency', 'fee' => 40000],
+                ['name' => 'Khansa', 'specialization' => 'Grammar for Speaking', 'fee' => 40000],
+                ['name' => 'Isna', 'specialization' => 'Snap Chat & Modern Tests', 'fee' => 42000],
+                ['name' => 'Clarissa', 'specialization' => 'Public Speaking & Presentation', 'fee' => 42000],
+                ['name' => 'Nabila', 'specialization' => 'Active Speaking & Debates', 'fee' => 42000],
+                ['name' => 'Pepsi', 'specialization' => 'Head Coach - IELTS Specialist', 'fee' => 50000],
+                ['name' => 'Dhani', 'specialization' => 'IELTS General Training', 'fee' => 45000],
+                ['name' => 'Anugrah', 'specialization' => 'Job Interview & Career English', 'fee' => 45000],
+            ];
+            $tutStmt = $pdo->prepare("INSERT IGNORE INTO `tutors` (`name`, `phone`, `specialization`, `fee_per_session`) VALUES (?, ?, ?, ?)");
+            foreach ($coaches as $c) {
+                $tutStmt->execute([$c['name'], '0856' . rand(1000000, 9999999), $c['specialization'], $c['fee']]);
+            }
+            $log("Default tutors seeded.");
         }
-        $log("Default tutors seeded.");
 
         // 3h. Periods
         $periodCount = (int)$pdo->query("SELECT COUNT(*) FROM `periods`")->fetchColumn();
@@ -672,15 +678,18 @@ class DatabaseMigrator {
             $log("Default periods seeded.");
         }
 
-        // 3i. Program Categories
-        $stmtProgCat = $pdo->prepare("INSERT IGNORE INTO `program_categories` (`name`, `report_group`) VALUES (?, ?)");
-        foreach ([
-            ['PEPSI OFFLINE', 'offline'],
-            ['PEPSI ONLINE CLASS', 'online'],
-            ['PEPSI KIDS', 'offline'],
-            ['NON KELAS', 'non_kelas'],
-        ] as $progCat) {
-            $stmtProgCat->execute($progCat);
+        // 3i. Program Categories (Hanya jika belum ada kategori sama sekali)
+        $progCatCount = (int)$pdo->query("SELECT COUNT(*) FROM `program_categories`")->fetchColumn();
+        if ($progCatCount === 0) {
+            $stmtProgCat = $pdo->prepare("INSERT IGNORE INTO `program_categories` (`name`, `report_group`) VALUES (?, ?)");
+            foreach ([
+                ['PEPSI OFFLINE', 'offline'],
+                ['PEPSI ONLINE CLASS', 'online'],
+                ['PEPSI KIDS', 'offline'],
+                ['NON KELAS', 'non_kelas'],
+            ] as $progCat) {
+                $stmtProgCat->execute($progCat);
+            }
         }
 
         // 3j. Programs
@@ -957,109 +966,119 @@ class DatabaseMigrator {
             ]
         ];
 
-        $stmtProg = $pdo->prepare("INSERT INTO `programs` 
-            (`code`, `title`, `level_category`, `orientation`, `level_label`, `price`, `english_ratio`, `description`, `syllabus`, `final_exam`, `is_new`) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE `title`=VALUES(`title`), `price`=VALUES(`price`), `description`=VALUES(`description`), `syllabus`=VALUES(`syllabus`)");
-        foreach ($programs as $p) {
-            $stmtProg->execute([
-                $p['code'], $p['title'], $p['level_category'], $p['orientation'], $p['level_label'],
-                $p['price'], $p['english_ratio'], $p['description'], $p['syllabus'], $p['final_exam'], $p['is_new']
-            ]);
+        // 3j. Programs (Hanya jika belum ada program sama sekali)
+        $progCount = (int)$pdo->query("SELECT COUNT(*) FROM `programs`")->fetchColumn();
+        if ($progCount === 0) {
+            $stmtProg = $pdo->prepare("INSERT INTO `programs` 
+                (`code`, `title`, `level_category`, `orientation`, `level_label`, `price`, `english_ratio`, `description`, `syllabus`, `final_exam`, `is_new`) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE `title`=VALUES(`title`), `price`=VALUES(`price`), `description`=VALUES(`description`), `syllabus`=VALUES(`syllabus`)");
+            foreach ($programs as $p) {
+                $stmtProg->execute([
+                    $p['code'], $p['title'], $p['level_category'], $p['orientation'], $p['level_label'],
+                    $p['price'], $p['english_ratio'], $p['description'], $p['syllabus'], $p['final_exam'], $p['is_new']
+                ]);
+            }
+            $pdo->exec("UPDATE `programs` SET `category_id` = (SELECT `id` FROM `program_categories` WHERE `name`='PEPSI OFFLINE' LIMIT 1) WHERE `category_id` IS NULL");
+            $log("Programs seeded.");
         }
-        $pdo->exec("UPDATE `programs` SET `category_id` = (SELECT `id` FROM `program_categories` WHERE `name`='PEPSI OFFLINE' LIMIT 1) WHERE `category_id` IS NULL");
-        $log("Programs seeded.");
 
-        // 3k. Schedules
-        $periodId = $pdo->query("SELECT id FROM periods ORDER BY id ASC LIMIT 1")->fetchColumn();
-        if ($periodId) {
-            $progMap = $pdo->query("SELECT code, id FROM programs")->fetchAll(PDO::FETCH_KEY_PAIR);
-            $roomMap = $pdo->query("SELECT name, id FROM rooms")->fetchAll(PDO::FETCH_KEY_PAIR);
-            $tutorMap = $pdo->query("SELECT name, id FROM tutors")->fetchAll(PDO::FETCH_KEY_PAIR);
+        // 3k. Schedules (Hanya jika belum ada jadwal sama sekali)
+        $scheduleCount = (int)$pdo->query("SELECT COUNT(*) FROM `schedules`")->fetchColumn();
+        if ($scheduleCount === 0) {
+            $periodId = $pdo->query("SELECT id FROM periods ORDER BY id ASC LIMIT 1")->fetchColumn();
+            if ($periodId) {
+                $progMap = $pdo->query("SELECT code, id FROM programs")->fetchAll(PDO::FETCH_KEY_PAIR);
+                $roomMap = $pdo->query("SELECT name, id FROM rooms")->fetchAll(PDO::FETCH_KEY_PAIR);
+                $tutorMap = $pdo->query("SELECT name, id FROM tutors")->fetchAll(PDO::FETCH_KEY_PAIR);
 
-            $schedulesRaw = [
-                ['time' => '07.00-08.30', 'code' => 'LT1', 'tutor' => 'Aprul', 'room' => 'Alpha'],
-                ['time' => '07.00-08.30', 'code' => 'ST', 'tutor' => 'Arul', 'room' => 'Bravo'],
-                ['time' => '08.30-10.00', 'code' => 'IP', 'tutor' => 'Annisa', 'room' => 'Charlie'],
-                ['time' => '08.30-10.00', 'code' => 'GFS1', 'tutor' => 'Khansa', 'room' => 'Deluxe'],
-                ['time' => '10.00-11.30', 'code' => 'SC', 'tutor' => 'Isna', 'room' => 'Gazebo'],
-                ['time' => '10.00-11.30', 'code' => 'SS', 'tutor' => 'Clarissa', 'room' => 'Romeo'],
-                ['time' => '13.00-14.30', 'code' => 'AS', 'tutor' => 'Nabila', 'room' => 'Alpha'],
-                ['time' => '13.00-14.30', 'code' => 'SFI-V', 'tutor' => 'Pepsi', 'room' => 'Bravo'],
-                ['time' => '14.30-16.00', 'code' => 'SFI-GT', 'tutor' => 'Dhani', 'room' => 'Charlie'],
-                ['time' => '14.30-16.00', 'code' => 'JI', 'tutor' => 'Anugrah', 'room' => 'Deluxe'],
-                ['time' => '16.00-17.30', 'code' => 'SFI-AC', 'tutor' => 'Pepsi', 'room' => 'Romeo'],
-                ['time' => '16.00-17.30', 'code' => 'MSFI', 'tutor' => 'Arul', 'room' => 'Deluxe']
+                $schedulesRaw = [
+                    ['time' => '07.00-08.30', 'code' => 'LT1', 'tutor' => 'Aprul', 'room' => 'Alpha'],
+                    ['time' => '07.00-08.30', 'code' => 'ST', 'tutor' => 'Arul', 'room' => 'Bravo'],
+                    ['time' => '08.30-10.00', 'code' => 'IP', 'tutor' => 'Annisa', 'room' => 'Charlie'],
+                    ['time' => '08.30-10.00', 'code' => 'GFS1', 'tutor' => 'Khansa', 'room' => 'Deluxe'],
+                    ['time' => '10.00-11.30', 'code' => 'SC', 'tutor' => 'Isna', 'room' => 'Gazebo'],
+                    ['time' => '10.00-11.30', 'code' => 'SS', 'tutor' => 'Clarissa', 'room' => 'Romeo'],
+                    ['time' => '13.00-14.30', 'code' => 'AS', 'tutor' => 'Nabila', 'room' => 'Alpha'],
+                    ['time' => '13.00-14.30', 'code' => 'SFI-V', 'tutor' => 'Pepsi', 'room' => 'Bravo'],
+                    ['time' => '14.30-16.00', 'code' => 'SFI-GT', 'tutor' => 'Dhani', 'room' => 'Charlie'],
+                    ['time' => '14.30-16.00', 'code' => 'JI', 'tutor' => 'Anugrah', 'room' => 'Deluxe'],
+                    ['time' => '16.00-17.30', 'code' => 'SFI-AC', 'tutor' => 'Pepsi', 'room' => 'Romeo'],
+                    ['time' => '16.00-17.30', 'code' => 'MSFI', 'tutor' => 'Arul', 'room' => 'Deluxe']
+                ];
+
+                $stmtSched = $pdo->prepare("INSERT IGNORE INTO `schedules` 
+                    (`period_id`, `day_name`, `time_slot`, `program_id`, `room_id`, `tutor_id`) 
+                    VALUES (?, 'Senin - Jumat', ?, ?, ?, ?)");
+                foreach ($schedulesRaw as $s) {
+                    if (isset($progMap[$s['code']], $roomMap[$s['room']], $tutorMap[$s['tutor']])) {
+                        $stmtSched->execute([
+                            $periodId,
+                            $s['time'],
+                            $progMap[$s['code']],
+                            $roomMap[$s['room']],
+                            $tutorMap[$s['tutor']]
+                        ]);
+                    }
+                }
+                $log("Schedules matrix seeded.");
+            }
+        }
+
+        // 3l. Canteen Categories & Products (Hanya jika produk kantin masih kosong)
+        $canteenProdCount = (int)$pdo->query("SELECT COUNT(*) FROM `canteen_products`")->fetchColumn();
+        if ($canteenProdCount === 0) {
+            $canteenCats = ['Minuman Dingin & Panas', 'Makanan Berat & Roti', 'Camilan / Snack', 'Merchandise & Alat Tulis'];
+            $stmtCat = $pdo->prepare("INSERT IGNORE INTO `canteen_categories` (`name`) VALUES (?)");
+            foreach ($canteenCats as $cat) {
+                $stmtCat->execute([$cat]);
+            }
+            $catMap = $pdo->query("SELECT name, id FROM canteen_categories")->fetchAll(PDO::FETCH_KEY_PAIR);
+
+            $products = [
+                ['name' => 'Air Mineral Le Minerale 600ml', 'barcode' => '8999901', 'cat' => 'Minuman Dingin & Panas', 'cost' => 2500, 'price' => 4000, 'stock' => 50],
+                ['name' => 'Teh Pucuk Harum 350ml', 'barcode' => '8999902', 'cat' => 'Minuman Dingin & Panas', 'cost' => 2500, 'price' => 4000, 'stock' => 40],
+                ['name' => 'Kopi Americano / Cold Brew', 'barcode' => '8999903', 'cat' => 'Minuman Dingin & Panas', 'cost' => 4000, 'price' => 8000, 'stock' => 30],
+                ['name' => 'Matcha Latte Ice', 'barcode' => '8999904', 'cat' => 'Minuman Dingin & Panas', 'cost' => 5500, 'price' => 10000, 'stock' => 25],
+                ['name' => 'Roti Bakar Coklat Keju', 'barcode' => '8999905', 'cat' => 'Makanan Berat & Roti', 'cost' => 7000, 'price' => 12000, 'stock' => 20],
+                ['name' => 'Nasi Goreng Spesial Pare', 'barcode' => '8999906', 'cat' => 'Makanan Berat & Roti', 'cost' => 9000, 'price' => 15000, 'stock' => 18],
+                ['name' => 'Mie Nyemek Telur', 'barcode' => '8999907', 'cat' => 'Makanan Berat & Roti', 'cost' => 6000, 'price' => 11000, 'stock' => 25],
+                ['name' => 'Keripik Singkong Balado', 'barcode' => '8999908', 'cat' => 'Camilan / Snack', 'cost' => 3000, 'price' => 5000, 'stock' => 45],
+                ['name' => 'Basreng Pedas Gurih', 'barcode' => '8999909', 'cat' => 'Camilan / Snack', 'cost' => 3500, 'price' => 6000, 'stock' => 35],
+                ['name' => 'Notebook Mr. Pepsi + Pen', 'barcode' => '8999910', 'cat' => 'Merchandise & Alat Tulis', 'cost' => 7000, 'price' => 12000, 'stock' => 30],
             ];
 
-            $stmtSched = $pdo->prepare("INSERT IGNORE INTO `schedules` 
-                (`period_id`, `day_name`, `time_slot`, `program_id`, `room_id`, `tutor_id`) 
-                VALUES (?, 'Senin - Jumat', ?, ?, ?, ?)");
-            foreach ($schedulesRaw as $s) {
-                if (isset($progMap[$s['code']], $roomMap[$s['room']], $tutorMap[$s['tutor']])) {
-                    $stmtSched->execute([
-                        $periodId,
-                        $s['time'],
-                        $progMap[$s['code']],
-                        $roomMap[$s['room']],
-                        $tutorMap[$s['tutor']]
-                    ]);
+            $stmtProd = $pdo->prepare("INSERT INTO `canteen_products` 
+                (`category_id`, `barcode`, `name`, `cost_price`, `selling_price`, `stock`, `min_stock`) 
+                VALUES (?, ?, ?, ?, ?, ?, 5)
+                ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `cost_price`=VALUES(`cost_price`), `selling_price`=VALUES(`selling_price`)");
+            foreach ($products as $pr) {
+                $stmtProd->execute([
+                    $catMap[$pr['cat']] ?? null,
+                    $pr['barcode'],
+                    $pr['name'],
+                    $pr['cost'],
+                    $pr['price'],
+                    $pr['stock']
+                ]);
+            }
+
+            // Seed batch FIFO awal
+            $batchCheck = $pdo->prepare("SELECT COUNT(*) FROM `canteen_stock_batches` WHERE product_id = ?");
+            $batchIns = $pdo->prepare("INSERT INTO `canteen_stock_batches` (`product_id`, `unit_cost`, `qty_in`, `qty_remaining`, `source`, `notes`) VALUES (?, ?, ?, ?, 'initial', 'Stok awal (seeder)')");
+            foreach ($pdo->query("SELECT id, cost_price, stock FROM `canteen_products`")->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+                $batchCheck->execute([$pr['id']]);
+                if ((int)$batchCheck->fetchColumn() > 0) {
+                    continue;
                 }
+                $stock = (int)$pr['stock'];
+                if ($stock <= 0) {
+                    continue;
+                }
+                $batchIns->execute([$pr['id'], $pr['cost_price'], $stock, $stock]);
             }
-            $log("Schedules matrix seeded.");
+            $log("Canteen products & batches seeded.");
         }
-
-        // 3l. Canteen Categories & Products
-        $canteenCats = ['Minuman Dingin & Panas', 'Makanan Berat & Roti', 'Camilan / Snack', 'Merchandise & Alat Tulis'];
-        $stmtCat = $pdo->prepare("INSERT IGNORE INTO `canteen_categories` (`name`) VALUES (?)");
-        foreach ($canteenCats as $cat) {
-            $stmtCat->execute([$cat]);
-        }
-        $catMap = $pdo->query("SELECT name, id FROM canteen_categories")->fetchAll(PDO::FETCH_KEY_PAIR);
-
-        $products = [
-            ['name' => 'Air Mineral Le Minerale 600ml', 'barcode' => '8999901', 'cat' => 'Minuman Dingin & Panas', 'cost' => 2500, 'price' => 4000, 'stock' => 50],
-            ['name' => 'Teh Pucuk Harum 350ml', 'barcode' => '8999902', 'cat' => 'Minuman Dingin & Panas', 'cost' => 2500, 'price' => 4000, 'stock' => 40],
-            ['name' => 'Kopi Americano / Cold Brew', 'barcode' => '8999903', 'cat' => 'Minuman Dingin & Panas', 'cost' => 4000, 'price' => 8000, 'stock' => 30],
-            ['name' => 'Matcha Latte Ice', 'barcode' => '8999904', 'cat' => 'Minuman Dingin & Panas', 'cost' => 5500, 'price' => 10000, 'stock' => 25],
-            ['name' => 'Roti Bakar Coklat Keju', 'barcode' => '8999905', 'cat' => 'Makanan Berat & Roti', 'cost' => 7000, 'price' => 12000, 'stock' => 20],
-            ['name' => 'Nasi Goreng Spesial Pare', 'barcode' => '8999906', 'cat' => 'Makanan Berat & Roti', 'cost' => 9000, 'price' => 15000, 'stock' => 18],
-            ['name' => 'Mie Nyemek Telur', 'barcode' => '8999907', 'cat' => 'Makanan Berat & Roti', 'cost' => 6000, 'price' => 11000, 'stock' => 25],
-            ['name' => 'Keripik Singkong Balado', 'barcode' => '8999908', 'cat' => 'Camilan / Snack', 'cost' => 3000, 'price' => 5000, 'stock' => 45],
-            ['name' => 'Basreng Pedas Gurih', 'barcode' => '8999909', 'cat' => 'Camilan / Snack', 'cost' => 3500, 'price' => 6000, 'stock' => 35],
-            ['name' => 'Notebook Mr. Pepsi + Pen', 'barcode' => '8999910', 'cat' => 'Merchandise & Alat Tulis', 'cost' => 7000, 'price' => 12000, 'stock' => 30],
-        ];
-
-        $stmtProd = $pdo->prepare("INSERT INTO `canteen_products` 
-            (`category_id`, `barcode`, `name`, `cost_price`, `selling_price`, `stock`, `min_stock`) 
-            VALUES (?, ?, ?, ?, ?, ?, 5)
-            ON DUPLICATE KEY UPDATE `name`=VALUES(`name`), `cost_price`=VALUES(`cost_price`), `selling_price`=VALUES(`selling_price`)");
-        foreach ($products as $pr) {
-            $stmtProd->execute([
-                $catMap[$pr['cat']] ?? null,
-                $pr['barcode'],
-                $pr['name'],
-                $pr['cost'],
-                $pr['price'],
-                $pr['stock']
-            ]);
-        }
-
-        // Seed batch FIFO awal
-        $batchCheck = $pdo->prepare("SELECT COUNT(*) FROM `canteen_stock_batches` WHERE product_id = ?");
-        $batchIns = $pdo->prepare("INSERT INTO `canteen_stock_batches` (`product_id`, `unit_cost`, `qty_in`, `qty_remaining`, `source`, `notes`) VALUES (?, ?, ?, ?, 'initial', 'Stok awal (seeder)')");
-        foreach ($pdo->query("SELECT id, cost_price, stock FROM `canteen_products`")->fetchAll(PDO::FETCH_ASSOC) as $pr) {
-            $batchCheck->execute([$pr['id']]);
-            if ((int)$batchCheck->fetchColumn() > 0) {
-                continue;
-            }
-            $stock = (int)$pr['stock'];
-            if ($stock <= 0) {
-                continue;
-            }
-            $batchIns->execute([$pr['id'], $pr['cost_price'], $stock, $stock]);
-        }
-        $log("Canteen products & batches seeded.");
 
         // ==========================================
         // 4. PERBARUI VERSI SKEMA
