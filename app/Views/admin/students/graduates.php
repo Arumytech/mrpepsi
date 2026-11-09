@@ -14,18 +14,23 @@ $gradeColors = [
     'POOR'      => 'bg-red-100 text-red-700 border border-red-300',
 ];
 
-// Data siswa aktif untuk search & dropdown
+// Data siswa aktif & seluruh siswa untuk search & dropdown
 $studentsData = array_map(function($s) {
     return [
-        'id'           => (int)$s['id'],
-        'full_name'    => (string)$s['full_name'],
-        'student_no'   => (string)$s['student_no'],
-        'phone'        => (string)($s['phone'] ?? ''),
-        'city'         => (string)($s['city'] ?? ''),
-        'period_name'  => (string)($s['period_name'] ?? ''),
-        'programs_raw' => (string)($s['programs_json'] ?? '[]'),
+        'id'                => (int)$s['id'],
+        'full_name'         => (string)$s['full_name'],
+        'student_no'        => (string)$s['student_no'],
+        'phone'             => (string)($s['phone'] ?? ''),
+        'city'              => (string)($s['city'] ?? ''),
+        'period_name'       => (string)($s['period_name'] ?? ''),
+        'status'            => (string)($s['status'] ?? 'active'),
+        'programs_raw'      => (string)($s['programs_json'] ?? '[]'),
+        'enriched_programs' => $s['enriched_programs'] ?? [],
+        'unissued_count'    => (int)($s['unissued_count'] ?? 0),
+        'total_programs'    => (int)($s['total_programs'] ?? 0),
+        'is_fully_graduated'=> !empty($s['is_fully_graduated']),
     ];
-}, $activeStudents);
+}, $allStudentsForCert ?? $activeStudents ?? []);
 ?>
 
 <script>
@@ -70,18 +75,65 @@ function graduatesApp() {
             this.studentSearch = '';
 
             this.programs = [];
-            try {
-                let progs = JSON.parse(s.programs_raw || '[]');
-                this.programs = progs.map(p => ({
+            if (s.enriched_programs && s.enriched_programs.length > 0) {
+                this.programs = s.enriched_programs.map(p => ({
+                    id: p.id || null,
                     title: p.title || '',
                     code: p.code || '',
+                    is_issued: !!p.is_issued,
+                    certificate_id: p.certificate_id || null,
+                    certificate_no: p.certificate_no || '',
+                    grade: p.grade || this.grade || 'GOOD',
+                    graduated_at: p.graduated_at || null,
+                    manual_cert_no: '',
+                    checked: !p.is_issued // otomatis centang HANYA yang belum terbit
+                }));
+            } else {
+                try {
+                    let progs = JSON.parse(s.programs_raw || '[]');
+                    this.programs = progs.map(p => ({
+                        id: p.id || null,
+                        title: p.title || '',
+                        code: p.code || '',
+                        is_issued: false,
+                        certificate_id: null,
+                        certificate_no: '',
+                        grade: this.grade || 'GOOD',
+                        manual_cert_no: '',
+                        checked: true
+                    }));
+                } catch(e) {}
+            }
+            if (this.programs.length === 0) {
+                this.programs = [{
+                    id: null,
+                    title: '',
+                    code: '',
+                    is_issued: false,
+                    certificate_id: null,
+                    certificate_no: '',
+                    grade: this.grade || 'GOOD',
                     manual_cert_no: '',
                     checked: true
-                }));
-            } catch(e) {}
-            if (this.programs.length === 0) {
-                this.programs = [{ title: '', code: '', manual_cert_no: '', checked: true }];
+                }];
             }
+        },
+
+        selectAllPending() {
+            this.programs.forEach(p => {
+                if (!p.is_issued) p.checked = true;
+            });
+        },
+
+        deselectAll() {
+            this.programs.forEach(p => p.checked = false);
+        },
+
+        applyGlobalGrade(val) {
+            this.grade = val;
+            this.programs.forEach(p => {
+                if (p.checked) p.grade = val;
+            });
         },
 
         clearStudent() {
@@ -106,7 +158,17 @@ function graduatesApp() {
         },
 
         addProgram() {
-            this.programs.push({ title: '', code: '', manual_cert_no: '', checked: true });
+            this.programs.push({
+                id: null,
+                title: '',
+                code: '',
+                is_issued: false,
+                certificate_id: null,
+                certificate_no: '',
+                grade: this.grade || 'GOOD',
+                manual_cert_no: '',
+                checked: true
+            });
         },
 
         removeProgram(i) {
@@ -116,13 +178,43 @@ function graduatesApp() {
         validateAndSubmit(event) {
             if (!this.selectedStudentId) {
                 alert('Silakan pilih siswa terlebih dahulu.');
+                event.preventDefault();
                 return;
             }
-            if (this.certMode === 'manual' && !this.manualCertNo.trim()) {
-                alert('Nomor sertifikat manual wajib diisi.');
+            let checkedProgs = this.programs.filter(p => p.checked && (p.title || '').trim() !== '');
+            if (checkedProgs.length === 0) {
+                alert('Pilih minimal satu program yang dicentang untuk diterbitkan sertifikatnya.');
+                event.preventDefault();
                 return;
             }
-            event.target.submit();
+            if (this.certMode === 'manual') {
+                if (checkedProgs.length === 1) {
+                    let p = checkedProgs[0];
+                    let certNo = (p.manual_cert_no || this.manualCertNo || '').trim();
+                    if (!certNo) {
+                        alert('Nomor sertifikat manual wajib diisi.');
+                        event.preventDefault();
+                        return;
+                    }
+                } else {
+                    let seen = {};
+                    for (let i = 0; i < checkedProgs.length; i++) {
+                        let p = checkedProgs[i];
+                        let certNo = (p.manual_cert_no || '').trim();
+                        if (!certNo) {
+                            alert('Untuk penerbitan lebih dari 1 program secara manual, kolom "No. Sertifikat Manual" wajib diisi untuk masing-masing program (' + (p.title || '#' + (i+1)) + ').');
+                            event.preventDefault();
+                            return;
+                        }
+                        if (seen[certNo]) {
+                            alert('Nomor sertifikat manual "' + certNo + '" duplikat antar program. Setiap sertifikat harus memiliki nomor unik.');
+                            event.preventDefault();
+                            return;
+                        }
+                        seen[certNo] = true;
+                    }
+                }
+            }
         }
     };
 }
@@ -438,7 +530,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
 
                 <form method="POST" action="<?= url('admin/students/issue-cert') ?>"
-                      @submit.prevent="validateAndSubmit($event)"
+                      @submit="validateAndSubmit($event)"
                       class="space-y-4 text-xs">
 
                     <input type="hidden" name="student_id" :value="selectedStudentId">
@@ -459,8 +551,16 @@ document.addEventListener('alpine:init', () => {
                                     ✓
                                 </div>
                                 <div>
-                                    <div class="font-black text-slate-900 text-xs sm:text-sm" x-text="selectedStudent ? selectedStudent.full_name : ''"></div>
-                                    <div class="text-[11px] text-slate-600 font-mono" x-text="selectedStudent ? ('NIS: ' + selectedStudent.student_no + (selectedStudent.city ? ' • ' + selectedStudent.city : '') + (selectedStudent.phone ? ' • ' + selectedStudent.phone : '')) : ''"></div>
+                                    <div class="font-black text-slate-900 text-xs sm:text-sm flex flex-wrap items-center gap-1.5">
+                                        <span x-text="selectedStudent ? selectedStudent.full_name : ''"></span>
+                                        <template x-if="selectedStudent && selectedStudent.total_programs > 0">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-full font-black tracking-tight"
+                                                  :class="selectedStudent.unissued_count > 0 ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'"
+                                                  x-text="selectedStudent.unissued_count > 0 ? (selectedStudent.unissued_count + ' dari ' + selectedStudent.total_programs + ' program belum terbit') : 'Semua program sudah terbit'">
+                                            </span>
+                                        </template>
+                                    </div>
+                                    <div class="text-[11px] text-slate-600 font-mono mt-0.5" x-text="selectedStudent ? ('NIS: ' + selectedStudent.student_no + (selectedStudent.city ? ' • ' + selectedStudent.city : '') + (selectedStudent.phone ? ' • ' + selectedStudent.phone : '')) : ''"></div>
                                 </div>
                             </div>
                             <button type="button" @click="clearStudent()" class="px-2.5 py-1.5 rounded-xl bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition flex items-center gap-1 shadow-2xs">
@@ -483,16 +583,27 @@ document.addEventListener('alpine:init', () => {
                                 <div x-show="studentSearch.trim().length > 0 && searchOpen" @click.away="searchOpen = false"
                                      class="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl divide-y divide-slate-100 z-30">
                                     <template x-for="s in filteredStudents()" :key="s.id">
-                                        <button type="button" @click="selectStudent(s)" class="w-full text-left px-3 py-2 hover:bg-amber-50 flex items-center justify-between transition">
+                                        <button type="button" @click="selectStudent(s)" class="w-full text-left px-3 py-2.5 hover:bg-amber-50 flex items-center justify-between transition">
                                             <div>
                                                 <div class="font-bold text-slate-800 text-xs" x-text="s.full_name"></div>
                                                 <div class="text-[10px] text-slate-400 font-mono" x-text="'NIS: ' + s.student_no + (s.city ? ' • ' + s.city : '')"></div>
                                             </div>
-                                            <span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-extrabold">Pilih</span>
+                                            <div class="flex items-center gap-1.5">
+                                                <template x-if="s.unissued_count > 0">
+                                                    <span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black"
+                                                          x-text="s.unissued_count + '/' + s.total_programs + ' Belum Terbit'"></span>
+                                                </template>
+                                                <template x-if="s.unissued_count === 0 && s.total_programs > 0">
+                                                    <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black">
+                                                        Lengkap
+                                                    </span>
+                                                </template>
+                                                <span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-500 text-white font-extrabold">Pilih</span>
+                                            </div>
                                         </button>
                                     </template>
                                     <div x-show="filteredStudents().length === 0" class="px-3 py-3 text-center text-slate-400 text-xs italic">
-                                        Tidak ada siswa aktif yang cocok dengan " <span x-text="studentSearch"></span> "
+                                        Tidak ada siswa yang cocok dengan " <span x-text="studentSearch"></span> "
                                     </div>
                                 </div>
                             </div>
@@ -501,15 +612,33 @@ document.addEventListener('alpine:init', () => {
                             <div>
                                 <select x-model="selectedStudentId" @change="onDropdownChange($event)"
                                         class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-semibold text-slate-800 bg-slate-50 text-xs">
-                                    <option value="">-- Atau Pilih dari Dropdown Siswa (<?= count($activeStudents) ?> Siswa) --</option>
-                                    <?php foreach ($activeStudents as $as): ?>
-                                        <option value="<?= (int)$as['id'] ?>">
-                                            <?= sanitize($as['full_name']) ?> (<?= sanitize($as['student_no']) ?><?= !empty($as['city']) ? ' - ' . sanitize($as['city']) : '' ?>)
-                                        </option>
-                                    <?php endforeach; ?>
+                                    <option value="">-- Atau Pilih dari Dropdown Siswa (<?= count($eligibleStudents ?? $activeStudents) ?> Siswa Belum Lengkap) --</option>
+                                    <?php if (!empty($eligibleStudents)): ?>
+                                        <optgroup label="📌 Siswa Memerlukan Sertifikat / Belum Lengkap (<?= count($eligibleStudents) ?>)">
+                                            <?php foreach ($eligibleStudents as $as): ?>
+                                                <?php
+                                                $unissued = (int)($as['unissued_count'] ?? 0);
+                                                $totalP   = (int)($as['total_programs'] ?? 0);
+                                                $info = $totalP > 0 ? " • {$unissued}/{$totalP} program belum terbit" : '';
+                                                ?>
+                                                <option value="<?= (int)$as['id'] ?>">
+                                                    <?= sanitize($as['full_name']) ?> (<?= sanitize($as['student_no']) ?><?= !empty($as['city']) ? ' - ' . sanitize($as['city']) : '' ?>)<?= $info ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endif; ?>
+                                    <?php if (!empty($completedStudents)): ?>
+                                        <optgroup label="✅ Siswa Sudah Lulus Semua Program (<?= count($completedStudents) ?>)">
+                                            <?php foreach ($completedStudents as $cs): ?>
+                                                <option value="<?= (int)$cs['id'] ?>">
+                                                    <?= sanitize($cs['full_name']) ?> (<?= sanitize($cs['student_no']) ?><?= !empty($cs['city']) ? ' - ' . sanitize($cs['city']) : '' ?>) • Selesai
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endif; ?>
                                 </select>
                             </div>
-                            <span class="text-[10px] text-slate-400 block">Hanya menampilkan siswa aktif. Program kursus akan dimuat otomatis saat siswa dipilih.</span>
+                            <span class="text-[10px] text-slate-400 block">Siswa aktif maupun yang belum lengkap programnya ditampilkan di atas. Program kursus akan dimuat otomatis saat siswa dipilih.</span>
                         </div>
                     </div>
 
@@ -540,54 +669,123 @@ document.addEventListener('alpine:init', () => {
                             <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <div>
                                 Nomor sertifikat resmi akan <strong class="text-slate-800">di-generate otomatis</strong> oleh sistem.
-                                <span class="text-indigo-600 font-mono font-bold" x-text="nextCertPreview ? '(Perkiraan: ' + nextCertPreview + ')' : ''"></span>
+                                <span class="text-indigo-600 font-mono font-bold" x-text="nextCertPreview ? '(Perkiraan awal: ' + nextCertPreview + ')' : ''"></span>
                             </div>
                         </div>
 
-                        <!-- Field Input Nomor Manual -->
+                        <!-- Field Input Nomor Manual (Jika 1 program) -->
                         <div x-show="certMode === 'manual'" x-cloak class="space-y-1.5 bg-amber-50/70 p-3 rounded-xl border border-amber-200">
                             <div class="flex items-center justify-between">
-                                <label class="block font-extrabold text-amber-900 text-xs">Nomor Sertifikat Manual *</label>
+                                <label class="block font-extrabold text-amber-900 text-xs">Nomor Sertifikat Manual (Default / 1 Program) *</label>
                                 <span class="text-[10px] text-amber-700 font-bold uppercase tracking-wider">Mode Manual Aktif</span>
                             </div>
                             <input type="text" name="manual_cert_no" x-model="manualCertNo"
                                    placeholder="Contoh: 00003/MPU/C.GFS/XI/2026 atau SERT-2026-001"
                                    class="w-full px-3 py-2 rounded-xl border border-amber-300 focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono font-bold text-slate-900 bg-white text-xs shadow-2xs">
                             <p class="text-[10px] text-slate-500">
-                                Ketik nomor sertifikat resmi secara manual. Nomor ini akan langsung disimpan dan dicetak pada lembar sertifikat.
+                                Jika menerbitkan lebih dari 1 program sekaligus, isi nomor masing-masing pada kartu program di bawah agar tidak duplikat.
                             </p>
                         </div>
                     </div>
 
                     <!-- ── DAFTAR PROGRAM ─────────────────────────────── -->
                     <div>
-                        <div class="flex items-center justify-between mb-1">
-                            <label class="block font-bold text-slate-700">Program yang Diselesaikan *</label>
-                            <button type="button" @click="addProgram()" class="text-[10px] font-bold text-amber-600 hover:text-amber-700">
-                                + Tambah Program
-                            </button>
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
+                            <div>
+                                <label class="block font-bold text-slate-700 text-xs">Program yang Diselesaikan *</label>
+                                <span class="text-[10px] text-slate-400">Centang program yang ingin diterbitkan. Setiap program memiliki nilai/predikat ujian tersendiri.</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="selectAllPending()" class="text-[10px] font-bold text-pepsi-blue hover:underline">
+                                    Pilih Belum Terbit
+                                </button>
+                                <span class="text-slate-300">•</span>
+                                <button type="button" @click="deselectAll()" class="text-[10px] font-bold text-slate-500 hover:underline">
+                                    Batal Pilih
+                                </button>
+                                <span class="text-slate-300">•</span>
+                                <button type="button" @click="addProgram()" class="text-[10px] font-bold text-amber-600 hover:text-amber-700">
+                                    + Tambah Program
+                                </button>
+                            </div>
                         </div>
-                        <p class="text-[10px] text-slate-400 mb-1.5">Centang program yang ingin diterbitkan sertifikatnya. 1 program = 1 sertifikat.</p>
-                        <div class="space-y-2">
+
+                        <div class="space-y-2.5">
                             <template x-for="(prog, i) in programs" :key="i">
-                                <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                                    <div class="flex items-start gap-2">
-                                        <input type="checkbox" x-model="prog.checked" class="mt-2.5 rounded text-amber-500 focus:ring-amber-500">
-                                        <div class="flex-1 grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-2">
-                                            <input type="text" name="program_title[]" x-model="prog.title" :disabled="!prog.checked"
-                                                   placeholder="Nama program"
-                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-semibold disabled:opacity-50 text-xs">
-                                            <input type="text" name="program_code[]" x-model="prog.code" :disabled="!prog.checked"
-                                                   placeholder="Kode (mis. GFS)"
-                                                   class="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono font-bold uppercase disabled:opacity-50 text-xs">
+                                <div class="p-3 rounded-2xl border transition"
+                                     :class="prog.is_issued ? 'bg-slate-50/90 border-slate-200' : (prog.checked ? 'bg-amber-50/40 border-amber-300 shadow-2xs' : 'bg-slate-50/60 border-slate-200 opacity-60')">
+                                    <div class="space-y-2.5">
+                                        <!-- Header row of program -->
+                                        <div class="flex items-start justify-between gap-2">
+                                            <div class="flex items-center gap-2">
+                                                <input type="checkbox" x-model="prog.checked" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 cursor-pointer">
+                                                <span class="font-extrabold text-slate-800 text-xs" x-text="'Program #' + (i + 1)"></span>
+                                            </div>
+
+                                            <div class="flex items-center gap-2">
+                                                <!-- Status Badge -->
+                                                <template x-if="prog.is_issued">
+                                                    <span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                                                        <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                                        <span>Sudah Terbit: <strong x-text="prog.certificate_no"></strong> (Predikat: <strong x-text="prog.grade"></strong>)</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!prog.is_issued">
+                                                    <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold">
+                                                        Belum Terbit
+                                                    </span>
+                                                </template>
+                                                <button type="button" @click="removeProgram(i)" class="text-slate-400 hover:text-red-500 font-bold text-base px-1 leading-none" title="Hapus dari form">&times;</button>
+                                            </div>
                                         </div>
-                                        <button type="button" @click="removeProgram(i)" class="mt-2 text-slate-400 hover:text-red-500 font-bold">&times;</button>
-                                    </div>
-                                    <!-- Jika Lebih dari 1 Program & Mode Manual Aktif -->
-                                    <div x-show="certMode === 'manual' && programs.length > 1 && prog.checked" class="pl-6">
-                                        <input type="text" name="manual_cert_no_item[]" x-model="prog.manual_cert_no"
-                                               :placeholder="'No. manual program ' + (prog.title || ('#' + (i+1))) + ' (opsional jika sama dengan no di atas)'"
-                                               class="w-full px-2.5 py-1.5 rounded-lg border border-amber-200 bg-white font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none">
+
+                                        <!-- Peringatan jika program yang sudah terbit dicentang -->
+                                        <div x-show="prog.is_issued && prog.checked" class="p-2 rounded-xl bg-orange-50 border border-orange-200 text-[11px] text-orange-800 flex items-center gap-2">
+                                            <svg class="w-4 h-4 text-orange-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                            <span><strong>Perhatian:</strong> Program ini sudah memiliki sertifikat resmi (<span x-text="prog.certificate_no"></span>). Mencentang program ini akan membuat sertifikat tambahan.</span>
+                                        </div>
+
+                                        <!-- Grid Input Program -->
+                                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                            <!-- Nama Program -->
+                                            <div class="sm:col-span-6">
+                                                <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Nama Program Kursus *</label>
+                                                <input type="text" name="program_title[]" x-model="prog.title" :disabled="!prog.checked" required
+                                                       placeholder="Contoh: English for Speaking - Level 1"
+                                                       class="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none font-semibold text-xs text-slate-800 disabled:bg-slate-100 disabled:text-slate-400">
+                                            </div>
+
+                                            <!-- Kode Program -->
+                                            <div class="sm:col-span-2">
+                                                <label class="block text-[10px] font-bold text-slate-500 mb-0.5">Kode (Opsional)</label>
+                                                <input type="text" name="program_code[]" x-model="prog.code" :disabled="!prog.checked"
+                                                       placeholder="LT1"
+                                                       class="w-full px-2.5 py-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none font-mono font-bold uppercase text-xs text-slate-800 disabled:bg-slate-100 disabled:text-slate-400">
+                                            </div>
+
+                                            <!-- Nilai Ujian Akhir (Predikat) Per Program -->
+                                            <div class="sm:col-span-4">
+                                                <label class="block text-[10px] font-extrabold text-slate-700 mb-0.5">Nilai Ujian Akhir (Predikat) *</label>
+                                                <select name="program_grade[]" x-model="prog.grade" :disabled="!prog.checked" required
+                                                        class="w-full px-2.5 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none font-black text-xs text-slate-800 disabled:bg-slate-100 disabled:text-slate-400">
+                                                    <option value="EXCELLENT">EXCELLENT (Istimewa)</option>
+                                                    <option value="VERY GOOD">VERY GOOD (Sangat Baik)</option>
+                                                    <option value="GOOD">GOOD (Baik)</option>
+                                                    <option value="AVERAGE">AVERAGE (Cukup)</option>
+                                                    <option value="POOR">POOR (Kurang)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <!-- Nomor Manual Khusus Program Ini (Jika Mode Manual) -->
+                                        <div x-show="certMode === 'manual' && prog.checked" class="pt-1.5 border-t border-amber-200/60">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-amber-900 shrink-0">No. Sertifikat Manual:</span>
+                                                <input type="text" name="manual_cert_no_item[]" x-model="prog.manual_cert_no" :disabled="!prog.checked"
+                                                       :placeholder="'Ketik nomor khusus program ' + (prog.title || '#' + (i+1))"
+                                                       class="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </template>
@@ -602,7 +800,7 @@ document.addEventListener('alpine:init', () => {
                                class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs font-medium">
                     </div>
 
-                    <!-- ── TANGGAL & NILAI AKHIR ──────────────────────── -->
+                    <!-- ── TANGGAL & PENGATURAN NILAI DEFAULT ─────────── -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">Tanggal Kelulusan *</label>
@@ -610,8 +808,11 @@ document.addEventListener('alpine:init', () => {
                                    class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs font-medium">
                         </div>
                         <div>
-                            <label class="block font-bold text-slate-700 mb-1">Nilai Ujian Akhir (Predikat) *</label>
-                            <select name="grade" x-model="grade" required
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block font-bold text-slate-700 text-xs">Setel Semua Nilai Sekaligus</label>
+                                <span class="text-[10px] text-slate-400">Atur cepat semua program</span>
+                            </div>
+                            <select name="grade" x-model="grade" @change="applyGlobalGrade($event.target.value)"
                                     class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold text-slate-800 text-xs">
                                 <option value="EXCELLENT">EXCELLENT (Istimewa)</option>
                                 <option value="VERY GOOD">VERY GOOD (Sangat Baik)</option>
@@ -628,6 +829,11 @@ document.addEventListener('alpine:init', () => {
                             Batal
                         </button>
                         <button type="submit" class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition shadow-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <span>Terbitkan Sertifikat</span>
+                        </button>
+                    </div>
+                </form>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <span>Terbitkan Sertifikat</span>
                         </button>

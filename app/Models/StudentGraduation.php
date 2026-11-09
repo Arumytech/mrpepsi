@@ -189,11 +189,133 @@ class StudentGraduation extends Model {
             'created_by'     => $createdBy ?: null,
         ]);
 
-        // Update student status
-        $studentModel = new Student();
-        $studentModel->update($studentId, ['status' => 'graduated']);
+        // Update status siswa: hanya berstatus 'graduated' jika SEMUA program yang diambil telah terbit sertifikatnya.
+        // Jika masih ada program lain yang belum selesai, siswa tetap berstatus 'active'.
+        $this->updateStudentStatusAfterGraduation($studentId);
 
         return ['id' => $id, 'certificate_no' => $certNo, 'is_kid' => $isKid];
+    }
+
+    // ── Update status siswa berdasarkan kelengkapan sertifikat seluruh program yang didaftarkan
+    public function updateStudentStatusAfterGraduation(int $studentId): void {
+        $studentModel = new Student();
+        $student = $studentModel->find($studentId);
+        if (!$student) return;
+
+        $programs   = json_decode($student['programs_json'] ?? '[]', true) ?: [];
+        $issuedList = $this->getByStudent($studentId);
+
+        // Jika sama sekali belum memiliki sertifikat yang diterbitkan: status tetap active
+        if (empty($issuedList)) {
+            if ($student['status'] !== 'active') {
+                $studentModel->update($studentId, ['status' => 'active']);
+            }
+            return;
+        }
+
+        // Jika programs_json kosong tapi ada sertifikat terbit: anggap graduated
+        if (empty($programs)) {
+            if ($student['status'] !== 'graduated') {
+                $studentModel->update($studentId, ['status' => 'graduated']);
+            }
+            return;
+        }
+
+        // Cek apakah setiap program yang didaftarkan sudah diterbitkan sertifikatnya
+        $enriched = $this->enrichStudentPrograms($student, $issuedList);
+        $allIssued = true;
+        foreach ($enriched as $ep) {
+            if (empty($ep['is_issued'])) {
+                $allIssued = false;
+                break;
+            }
+        }
+
+        $newStatus = $allIssued ? 'graduated' : 'active';
+        if ($student['status'] !== $newStatus) {
+            $studentModel->update($studentId, ['status' => $newStatus]);
+        }
+    }
+
+    // ── Ambil semua data sertifikat kelulusan dikelompokkan per student_id
+    public function getGraduationsGroupedByStudent(): array {
+        $rows = $this->raw("SELECT id, student_id, certificate_no, program_title, program_code, grade, graduated_at, is_kid, created_at FROM `{$this->table}` ORDER BY graduated_at DESC, id DESC");
+        $byStudent = [];
+        foreach ($rows as $r) {
+            $byStudent[(int)$r['student_id']][] = $r;
+        }
+        return $byStudent;
+    }
+
+    // ── Enrich daftar program siswa dengan status penerbitan sertifikat (is_issued, certificate_no, grade)
+    public function enrichStudentPrograms(array $student, array $issuedRows = [], array $activePrograms = []): array {
+        $programs = json_decode($student['programs_json'] ?? '[]', true) ?: [];
+        if (empty($issuedRows) && !empty($student['id'])) {
+            $issuedRows = $this->getByStudent((int)$student['id']);
+        }
+
+        // Peta kode program dari activePrograms
+        $progCodeById = [];
+        $progCodeByTitle = [];
+        foreach ($activePrograms as $ap) {
+            if (!empty($ap['id']) && !empty($ap['code'])) {
+                $progCodeById[(int)$ap['id']] = (string)$ap['code'];
+            }
+            if (!empty($ap['title']) && !empty($ap['code'])) {
+                $progCodeByTitle[strtolower(trim((string)$ap['title']))] = (string)$ap['code'];
+            }
+        }
+
+        $usedGradIds = [];
+        $enriched = [];
+
+        foreach ($programs as $prog) {
+            $title = trim((string)($prog['title'] ?? ''));
+            $code  = trim((string)($prog['code'] ?? ''));
+
+            // Auto-isi kode program jika di programs_json masih kosong
+            if ($code === '') {
+                $progId = (int)($prog['id'] ?? 0);
+                if ($progId && isset($progCodeById[$progId])) {
+                    $code = $progCodeById[$progId];
+                } elseif ($title !== '' && isset($progCodeByTitle[strtolower($title)])) {
+                    $code = $progCodeByTitle[strtolower($title)];
+                }
+            }
+
+            $matched = null;
+            foreach ($issuedRows as $g) {
+                if (in_array((int)$g['id'], $usedGradIds, true)) continue;
+
+                $gTitle = trim((string)($g['program_title'] ?? ''));
+                $gCode  = trim((string)($g['program_code'] ?? ''));
+
+                $matchTitle = ($title !== '' && strcasecmp($title, $gTitle) === 0);
+                $matchCode  = ($code !== '' && strcasecmp($code, $gCode) === 0);
+
+                if ($matchTitle || $matchCode) {
+                    $matched = $g;
+                    $usedGradIds[] = (int)$g['id'];
+                    break;
+                }
+            }
+
+            $isIssued = ($matched !== null);
+            $enriched[] = [
+                'id'             => $prog['id'] ?? null,
+                'title'          => $title,
+                'code'           => $code,
+                'is_issued'      => $isIssued,
+                'certificate_id' => $matched ? (int)$matched['id'] : null,
+                'certificate_no' => $matched['certificate_no'] ?? '',
+                'grade'          => $matched ? $this->normalizeGrade($matched['grade'] ?? 'GOOD') : 'GOOD',
+                'graduated_at'   => $matched['graduated_at'] ?? null,
+                'checked'        => !$isIssued,
+                'manual_cert_no' => '',
+            ];
+        }
+
+        return $enriched;
     }
 
     // ── Normalisasi predikat kelulusan (hanya kategori yang diizinkan)

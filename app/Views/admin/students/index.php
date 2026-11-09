@@ -89,23 +89,81 @@ function studentsManager() {
             this.editModal = true;
         },
         openGraduate(student) {
+            let progs = [];
+            if (student.enriched_programs && student.enriched_programs.length > 0) {
+                progs = JSON.parse(JSON.stringify(student.enriched_programs));
+            } else {
+                try {
+                    let parsed = JSON.parse(student.programs_json || '[]');
+                    progs = parsed.map(p => ({
+                        title: p.title || '',
+                        code: p.code || '',
+                        grade: 'GOOD',
+                        is_issued: false,
+                        checked: true
+                    }));
+                } catch(e){}
+            }
+
+            if (progs.length === 0) {
+                progs = [{
+                    title: '',
+                    code: '',
+                    grade: 'GOOD',
+                    is_issued: false,
+                    checked: true
+                }];
+            }
+
             this.gradData = {
                 student_id: student.id,
                 student_name: student.full_name,
                 student_no: student.student_no,
                 period_name: student.period_name || '',
-                program_title: '',
-                program_code: '',
-                grade: 'GOOD'
+                graduated_at: new Date().toISOString().split('T')[0],
+                grade: 'GOOD',
+                programs: progs,
+                unissued_count: student.unissued_count ?? progs.filter(p => !p.is_issued).length,
+                total_programs: student.total_programs ?? progs.length
             };
-            try {
-                let progs = JSON.parse(student.programs_json || '[]');
-                if (progs.length > 0) {
-                    this.gradData.program_title = progs[0].title || '';
-                    this.gradData.program_code = progs[0].code || '';
-                }
-            } catch(e){}
             this.graduateModal = true;
+        },
+
+        selectAllGradPending() {
+            if (this.gradData && this.gradData.programs) {
+                this.gradData.programs.forEach(p => {
+                    if (!p.is_issued) p.checked = true;
+                });
+            }
+        },
+
+        deselectAllGrad() {
+            if (this.gradData && this.gradData.programs) {
+                this.gradData.programs.forEach(p => p.checked = false);
+            }
+        },
+
+        applyGradGlobalGrade(val) {
+            if (this.gradData && this.gradData.programs) {
+                this.gradData.grade = val;
+                this.gradData.programs.forEach(p => {
+                    if (p.checked) p.grade = val;
+                });
+            }
+        },
+
+        validateGradSubmit(event) {
+            if (!this.gradData || !this.gradData.student_id) {
+                alert('Siswa tidak valid.');
+                event.preventDefault();
+                return;
+            }
+            let checkedProgs = (this.gradData.programs || []).filter(p => p.checked && (p.title || '').trim() !== '');
+            if (checkedProgs.length === 0) {
+                alert('Pilih minimal satu program yang dicentang untuk diterbitkan sertifikatnya.');
+                event.preventDefault();
+                return;
+            }
         }
     };
 }
@@ -893,71 +951,116 @@ function studentsManager() {
     <div x-show="graduateModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" @click="graduateModal = false"></div>
         <div class="min-h-screen px-4 flex items-center justify-center p-4">
-            <div class="relative bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div class="relative bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-100 space-y-4 my-8">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div class="flex items-center gap-2.5">
                         <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z"/></svg>
                         </div>
                         <div>
-                            <h3 class="text-base font-black text-slate-800">Luluskan Siswa & Cetak Sertifikat</h3>
-                            <p class="text-xs text-slate-500">Terbitkan nomor sertifikat resmi kursus</p>
+                            <h3 class="text-base font-black text-slate-800">Luluskan Siswa & Terbitkan Sertifikat</h3>
+                            <p class="text-xs text-slate-500">Pilih program dan tentukan predikat nilai ujian akhir masing-masing</p>
                         </div>
                     </div>
                     <button @click="graduateModal = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
                 </div>
 
-                <form method="POST" action="<?= url('admin/students/issue-cert') ?>" class="space-y-3.5 text-xs">
+                <form method="POST" action="<?= url('admin/students/issue-cert') ?>" @submit="validateGradSubmit($event)" class="space-y-4 text-xs">
                     <input type="hidden" name="student_id" :value="gradData.student_id">
+                    <input type="hidden" name="redirect_to" value="<?= url('admin/students/graduates') ?>">
 
                     <!-- Student Info Box -->
-                    <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
-                        <span class="text-[10px] text-slate-400 font-bold uppercase block">Penerima Sertifikat</span>
-                        <div class="font-extrabold text-slate-800 text-sm" x-text="gradData.student_name"></div>
-                        <div class="font-mono text-pepsi-blue text-[11px] font-bold" x-text="gradData.student_no"></div>
+                    <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                        <div>
+                            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Penerima Sertifikat</span>
+                            <div class="font-black text-slate-800 text-sm" x-text="gradData.student_name"></div>
+                            <div class="font-mono text-pepsi-blue text-[11px] font-bold" x-text="gradData.student_no"></div>
+                        </div>
+                        <template x-if="gradData.total_programs > 0">
+                            <span class="text-[10px] px-2.5 py-1 rounded-full font-black border"
+                                  :class="gradData.unissued_count > 0 ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-emerald-100 text-emerald-900 border-emerald-300'"
+                                  x-text="gradData.unissued_count > 0 ? (gradData.unissued_count + ' dari ' + gradData.total_programs + ' belum terbit') : 'Semua program lulus'">
+                            </span>
+                        </template>
                     </div>
 
+                    <!-- Program List dengan Checkbox & Grade masing-masing -->
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Nama Program yang Diselesaikan *</label>
-                        <input type="text" name="program_title" x-model="gradData.program_title" required
-                               placeholder="Contoh: English for Speaking - Level 1"
-                               class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-semibold">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block font-bold text-slate-700 text-xs">Program Kursus & Predikat Nilai *</label>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="selectAllGradPending()" class="text-[10px] font-bold text-pepsi-blue hover:underline">
+                                    Pilih Belum Terbit
+                                </button>
+                                <span class="text-slate-300">•</span>
+                                <button type="button" @click="deselectAllGrad()" class="text-[10px] font-bold text-slate-500 hover:underline">
+                                    Batal Pilih
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                            <template x-for="(prog, i) in (gradData.programs || [])" :key="i">
+                                <div class="p-3 rounded-2xl border transition"
+                                     :class="prog.is_issued ? 'bg-slate-50/90 border-slate-200' : (prog.checked ? 'bg-amber-50/40 border-amber-300 shadow-2xs' : 'bg-slate-50/60 border-slate-200 opacity-60')">
+                                    <div class="space-y-2">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <div class="flex items-center gap-2">
+                                                <input type="checkbox" x-model="prog.checked" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 cursor-pointer">
+                                                <span class="font-extrabold text-slate-800 text-xs" x-text="prog.title || ('Program #' + (i + 1))"></span>
+                                            </div>
+
+                                            <div>
+                                                <template x-if="prog.is_issued">
+                                                    <span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
+                                                        <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                                        <span>Sudah Terbit: <strong x-text="prog.certificate_no"></strong> (Predikat: <strong x-text="prog.grade"></strong>)</span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!prog.is_issued">
+                                                    <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold">
+                                                        Belum Terbit
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <input type="hidden" name="program_title[]" :value="prog.title" :disabled="!prog.checked">
+                                        <input type="hidden" name="program_code[]" :value="prog.code" :disabled="!prog.checked">
+
+                                        <!-- Predikat Nilai Spesifik Program Ini -->
+                                        <div class="flex items-center gap-2 pt-1 border-t border-slate-200/60">
+                                            <label class="text-[11px] font-bold text-slate-700 shrink-0">Nilai Ujian Akhir (Predikat):</label>
+                                            <select name="program_grade[]" x-model="prog.grade" :disabled="!prog.checked"
+                                                    class="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-black text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">
+                                                <option value="EXCELLENT">EXCELLENT (Istimewa)</option>
+                                                <option value="VERY GOOD">VERY GOOD (Sangat Baik)</option>
+                                                <option value="GOOD">GOOD (Baik)</option>
+                                                <option value="AVERAGE">AVERAGE (Cukup)</option>
+                                                <option value="POOR">POOR (Kurang)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Kode Program (Opsional)</label>
-                            <input type="text" name="program_code" x-model="gradData.program_code" placeholder="Misal: ENG-SPK-1"
-                                   class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none">
-                        </div>
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">Periode Belajar</label>
                             <input type="text" name="period_name" x-model="gradData.period_name" placeholder="Periode Oktober 2026"
                                    class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none">
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block font-bold text-slate-700 mb-1">Tanggal Kelulusan</label>
-                            <input type="date" name="graduated_at" value="<?= date('Y-m-d') ?>"
-                                   class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Nilai Ujian Akhir *</label>
-                            <select name="grade" x-model="gradData.grade" required
-                                    class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-bold text-slate-800">
-                                <option value="EXCELLENT">EXCELLENT</option>
-                                <option value="VERY GOOD">VERY GOOD</option>
-                                <option value="GOOD">GOOD</option>
-                                <option value="AVERAGE">AVERAGE</option>
-                                <option value="POOR">POOR</option>
-                            </select>
+                            <input type="date" name="graduated_at" x-model="gradData.graduated_at"
+                                   class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-none font-semibold">
                         </div>
                     </div>
 
                     <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                        <button type="button" @click="graduateModal = false" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold">
+                        <button type="button" @click="graduateModal = false" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition">
                             Batal
                         </button>
                         <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition shadow-sm flex items-center gap-1.5">

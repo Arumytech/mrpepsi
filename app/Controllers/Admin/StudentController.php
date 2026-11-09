@@ -38,6 +38,18 @@ class StudentController extends Controller {
         $programs   = (new Program())->getActivePrograms();
         $regPeriods = (new Period())->all('ABS(DATEDIFF(start_date, CURDATE())) ASC');
 
+        // Hubungkan setiap siswa dengan detail kelulusan program (is_issued, grade, cert_no)
+        $gradModel = new StudentGraduation();
+        $issuedByStudent = $gradModel->getGraduationsGroupedByStudent();
+        foreach ($students as &$s) {
+            $studentId = (int)$s['id'];
+            $issuedRows = $issuedByStudent[$studentId] ?? [];
+            $s['enriched_programs'] = $gradModel->enrichStudentPrograms($s, $issuedRows, $programs);
+            $s['unissued_count'] = count(array_filter($s['enriched_programs'], fn($p) => empty($p['is_issued'])));
+            $s['total_programs'] = count($s['enriched_programs']);
+        }
+        unset($s);
+
         // Ambil distinct time_slot dari schedules untuk dropdown
         $pdo = Database::getConnection();
         $tsStmt = $pdo->query(
@@ -280,20 +292,67 @@ class StudentController extends Controller {
         $lastCert    = $gradModel->getLastCertInfo();
         $nextCertPreview = $gradModel->previewNextCertNo();
 
-        // Students eligible for graduation (active, not yet issued cert for each prog)
-        $activeStudents = (new Student())->getFiltered('active', '');
+        // Siswa yang berhak lulus atau masih memiliki program kursus yang belum diterbitkan sertifikatnya
+        $studentModel    = new Student();
+        $allStudentsList = $studentModel->all('full_name ASC');
+        $issuedByStudent = $gradModel->getGraduationsGroupedByStudent();
+
+        $eligibleStudents  = [];
+        $completedStudents = [];
+
+        foreach ($allStudentsList as &$s) {
+            $studentId  = (int)$s['id'];
+            $issuedRows = $issuedByStudent[$studentId] ?? [];
+            $enriched   = $gradModel->enrichStudentPrograms($s, $issuedRows, $programs);
+
+            $s['enriched_programs']  = $enriched;
+            $s['issued_graduations'] = $issuedRows;
+
+            $totalProgs    = count($enriched);
+            $unissuedProgs = count(array_filter($enriched, fn($p) => empty($p['is_issued'])));
+            $s['total_programs'] = $totalProgs;
+            $s['unissued_count'] = $unissuedProgs;
+
+            // Perbaikan otomatis: jika siswa berstatus 'graduated' padahal masih ada program yang belum terbit sertifikatnya
+            if ($s['status'] === 'graduated' && $unissuedProgs > 0) {
+                $studentModel->update($studentId, ['status' => 'active']);
+                $s['status'] = 'active';
+            }
+
+            // Siswa dianggap lulus penuh jika semua program di programs_json sudah diterbitkan sertifikatnya
+            $isFullyGrad = ($totalProgs > 0 && $unissuedProgs === 0) || ($totalProgs === 0 && !empty($issuedRows));
+            $s['is_fully_graduated'] = $isFullyGrad;
+
+            if ($isFullyGrad) {
+                $completedStudents[] = $s;
+            } else {
+                $eligibleStudents[] = $s;
+            }
+        }
+        unset($s);
+
+        // Urutkan siswa eligible: yang memiliki program belum terbit terbanyak di atas
+        usort($eligibleStudents, function($a, $b) {
+            if ($a['unissued_count'] !== $b['unissued_count']) {
+                return $b['unissued_count'] <=> $a['unissued_count'];
+            }
+            return strcasecmp($a['full_name'], $b['full_name']);
+        });
 
         $this->view('admin.students.graduates', [
-            'graduations'     => $graduations,
-            'gradStats'       => $gradStats,
-            'periods'         => $periods,
-            'programs'        => $programs,
-            'activeStudents'  => $activeStudents,
-            'search'          => $search,
-            'currentPeriod'   => $period,
-            'settings'        => $settings,
-            'lastCert'        => $lastCert,
-            'nextCertPreview' => $nextCertPreview,
+            'graduations'        => $graduations,
+            'gradStats'          => $gradStats,
+            'periods'            => $periods,
+            'programs'           => $programs,
+            'activeStudents'     => $eligibleStudents, // kompatibilitas
+            'eligibleStudents'   => $eligibleStudents,
+            'completedStudents'  => $completedStudents,
+            'allStudentsForCert' => array_merge($eligibleStudents, $completedStudents),
+            'search'             => $search,
+            'currentPeriod'      => $period,
+            'settings'           => $settings,
+            'lastCert'           => $lastCert,
+            'nextCertPreview'    => $nextCertPreview,
         ], 'admin');
     }
 
@@ -306,62 +365,90 @@ class StudentController extends Controller {
         $studentId          = (int)($_POST['student_id'] ?? 0);
         $programTitles      = $_POST['program_title'] ?? [];
         $programCodes       = $_POST['program_code'] ?? [];
+        $programGrades      = $_POST['program_grade'] ?? [];
         $periodName         = trim($_POST['period_name'] ?? '');
         $graduatedAt        = trim($_POST['graduated_at'] ?? date('Y-m-d'));
-        $grade              = trim($_POST['grade'] ?? '');
+        $globalGrade        = trim($_POST['grade'] ?? 'GOOD');
         $certMode           = trim($_POST['cert_mode'] ?? 'auto'); // 'auto' | 'manual'
         $manualCertNo       = trim($_POST['manual_cert_no'] ?? '');
         $manualCertNoItems  = $_POST['manual_cert_no_item'] ?? [];
+        $redirectTo         = trim($_POST['redirect_to'] ?? 'admin/students/graduates');
 
         // Dukung input tunggal maupun banyak program sekaligus
         if (!is_array($programTitles))     $programTitles     = [$programTitles];
         if (!is_array($programCodes))      $programCodes      = [$programCodes];
+        if (!is_array($programGrades))     $programGrades     = [$programGrades];
         if (!is_array($manualCertNoItems)) $manualCertNoItems = [$manualCertNoItems];
+        $programTitles     = array_values($programTitles);
         $programCodes      = array_values($programCodes);
+        $programGrades     = array_values($programGrades);
         $manualCertNoItems = array_values($manualCertNoItems);
 
         if (!$studentId) {
             $this->setFlash('error', 'Siswa wajib dipilih.');
-            $this->redirect('admin/students/graduates');
+            $this->redirect($redirectTo);
             return;
         }
 
         $gradModel = new StudentGraduation();
         $issued = [];
+
+        // Siapkan peta kode program aktif sebagai fallback jika kode kosong
+        $activePrograms = (new Program())->getActivePrograms();
+        $codeMap = [];
+        foreach ($activePrograms as $ap) {
+            if (!empty($ap['code'])) {
+                $codeMap[strtolower(trim($ap['title']))] = (string)$ap['code'];
+            }
+        }
+
         foreach ($programTitles as $i => $title) {
             $title = trim((string)$title);
             if ($title === '') continue;
 
+            $code = trim((string)($programCodes[$i] ?? ''));
+            if ($code === '' && isset($codeMap[strtolower($title)])) {
+                $code = $codeMap[strtolower($title)];
+            }
+
+            // Ambil predikat nilai spesifik untuk program ini, fallback ke predikat global
+            $progGrade = trim((string)($programGrades[$i] ?? ''));
+            if ($progGrade === '') {
+                $progGrade = $globalGrade;
+            }
+
             $certNoToUse = '';
             if ($certMode === 'manual') {
                 $itemManual = trim((string)($manualCertNoItems[$i] ?? ''));
-                $certNoToUse = $itemManual !== '' ? $itemManual : $manualCertNo;
-
-                if ($certNoToUse === '') {
-                    $this->setFlash('error', 'Nomor sertifikat manual wajib diisi untuk program: ' . $title);
-                    $this->redirect('admin/students/graduates');
+                if ($itemManual !== '') {
+                    $certNoToUse = $itemManual;
+                } elseif (count($programTitles) === 1 && $manualCertNo !== '') {
+                    $certNoToUse = $manualCertNo;
+                } else {
+                    $this->setFlash('error', "Nomor sertifikat manual wajib diisi secara spesifik untuk program '{$title}'.");
+                    $this->redirect($redirectTo);
                     return;
                 }
 
                 if (in_array($certNoToUse, $issued, true)) {
-                    $this->setFlash('error', "Nomor sertifikat '{$certNoToUse}' duplikat di antara program yang dipilih. Setiap sertifikat harus memiliki nomor unik.");
-                    $this->redirect('admin/students/graduates');
+                    $this->setFlash('error', "Nomor sertifikat '{$certNoToUse}' duplikat di antara program yang dipilih. Setiap program harus memiliki nomor sertifikat unik.");
+                    $this->redirect($redirectTo);
                     return;
                 }
 
                 if ($gradModel->isCertNoExists($certNoToUse)) {
                     $this->setFlash('error', "Nomor sertifikat '{$certNoToUse}' sudah pernah digunakan pada sertifikat lain. Silakan gunakan nomor lain.");
-                    $this->redirect('admin/students/graduates');
+                    $this->redirect($redirectTo);
                     return;
                 }
             }
 
             $gradData = [
                 'program_title' => $title,
-                'program_code'  => trim((string)($programCodes[$i] ?? '')),
+                'program_code'  => $code,
                 'period_name'   => $periodName,
                 'graduated_at'  => $graduatedAt,
-                'grade'         => $grade,
+                'grade'         => $progGrade,
             ];
             if ($certNoToUse !== '') {
                 $gradData['certificate_no'] = $certNoToUse;
@@ -373,7 +460,8 @@ class StudentController extends Controller {
 
         if (empty($issued)) {
             $this->setFlash('error', 'Pilih minimal satu program untuk diterbitkan sertifikatnya.');
-            $this->redirect('admin/students/graduates');
+            $this->redirect($redirectTo);
+            return;
         }
 
         if (count($issued) === 1) {
@@ -381,7 +469,7 @@ class StudentController extends Controller {
         } else {
             $this->setFlash('success', count($issued) . ' sertifikat berhasil diterbitkan: ' . implode(', ', $issued));
         }
-        $this->redirect('admin/students/graduates');
+        $this->redirect($redirectTo);
     }
 
     // ──────────────────────────────────────────────────
@@ -425,11 +513,8 @@ class StudentController extends Controller {
         $grad = $gradModel->find($id);
         if ($grad) {
             $gradModel->delete($id);
-            // Re-check if student still has any graduation; if not, revert to active
-            $remaining = $gradModel->getByStudent($grad['student_id']);
-            if (empty($remaining)) {
-                (new Student())->update($grad['student_id'], ['status' => 'active']);
-            }
+            // Perbarui status siswa secara dinamis: jika masih ada sisa sertifikat atau program belum lengkap
+            $gradModel->updateStudentStatusAfterGraduation((int)$grad['student_id']);
         }
 
         $this->setFlash('success', 'Catatan kelulusan berhasil dihapus.');
