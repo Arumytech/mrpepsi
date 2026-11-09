@@ -424,18 +424,18 @@
 
                 <!-- Tombol & Popup Cek Update Aplikasi -->
                 <div class="relative" x-data="topbarUpdateChecker()">
-                    <button type="button" @click="toggleCheck()" :disabled="loading"
+                    <button type="button" @click="toggleCheck()" :disabled="loading || updating"
                             title="Cek Pembaruan Aplikasi"
-                            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-slate-600 hover:text-pepsi-blue transition text-xs font-semibold shadow-sm cursor-pointer">
-                        <svg :class="{'animate-spin text-pepsi-blue': loading}" class="w-3.5 h-3.5 text-slate-500 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-slate-600 hover:text-pepsi-blue transition text-xs font-semibold shadow-sm cursor-pointer disabled:opacity-60">
+                        <svg :class="{'animate-spin text-pepsi-blue': loading || updating}" class="w-3.5 h-3.5 text-slate-500 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        <span class="hidden md:inline text-[11px] font-bold">Cek Update</span>
+                        <span class="hidden md:inline text-[11px] font-bold" x-text="updating ? 'Memperbarui...' : (loading ? 'Memeriksa...' : 'Cek Update')">Cek Update</span>
                         <span class="w-2 h-2 rounded-full" :class="hasUpdate ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'"></span>
                     </button>
 
                     <!-- Popup Dropdown Hasil Cek Update -->
-                    <div x-show="showPopup" x-cloak @click.away="showPopup = false"
+                    <div x-show="showPopup" x-cloak @click.away="if (!updating) showPopup = false"
                          x-transition:enter="transition ease-out duration-150"
                          x-transition:enter-start="opacity-0 translate-y-1 scale-95"
                          x-transition:enter-end="opacity-100 translate-y-0 scale-100"
@@ -448,7 +448,7 @@
                                 <span class="text-sm">⚡</span>
                                 <span class="font-bold text-slate-800 text-xs">Pembaruan Aplikasi</span>
                             </div>
-                            <button type="button" @click="showPopup = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">✕</button>
+                            <button type="button" @click="showPopup = false" :disabled="updating" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">✕</button>
                         </div>
 
                         <!-- Loading State -->
@@ -457,38 +457,78 @@
                             <span class="text-slate-500 text-[11px] block">Memeriksa pembaruan aplikasi...</span>
                         </div>
 
+                        <!-- Updating State -->
+                        <div x-show="updating" class="py-4 text-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                            <span class="text-slate-700 font-bold text-[11px] block">Sedang Menerapkan Pembaruan...</span>
+                            <span class="text-slate-400 text-[10px] block">Mencadangkan file otomatis &amp; menyinkronkan sistem...</span>
+                        </div>
+
                         <!-- Hasil Cek State -->
-                        <div x-show="!loading && result" class="space-y-2.5">
-                            <!-- Bila ada update -->
-                            <template x-if="result && result.has_update">
+                        <div x-show="!loading && !updating && (result || updateSuccess)" class="space-y-2.5">
+                            <!-- Bila update baru saja sukses diterapkan -->
+                            <template x-if="updateSuccess">
+                                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-emerald-900">
+                                    <div class="flex items-center gap-1.5 text-emerald-700 font-bold">
+                                        <span>✓</span>
+                                        <span>Pembaruan Berhasil Diterapkan!</span>
+                                    </div>
+                                    <p class="text-[11px]" x-text="updateSuccessMessage"></p>
+                                    <button type="button" onclick="location.reload()"
+                                            class="w-full text-center px-3 py-1.5 bg-pepsi-blue hover:bg-blue-700 text-white font-bold rounded-lg text-[11px] transition cursor-pointer">
+                                        Muat Ulang Halaman
+                                    </button>
+                                </div>
+                            </template>
+
+                            <!-- Bila ada update baru tersedia -->
+                            <template x-if="!updateSuccess && result && result.has_update">
                                 <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-emerald-900">
                                     <span class="font-bold block text-xs">🎉 Pembaruan Baru Tersedia!</span>
                                     <p class="text-[11px]" x-text="result.message"></p>
-                                    <a href="<?= url('admin/settings#update-section') ?>" class="block text-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition">
-                                        Buka Pengaturan &amp; Update &rarr;
-                                    </a>
+                                    <div class="flex flex-col gap-1.5 pt-1">
+                                        <button type="button" @click="runApply()"
+                                                class="w-full text-center px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition shadow cursor-pointer">
+                                            🚀 Terapkan Pembaruan Sekarang
+                                        </button>
+                                        <?php if (\App\Core\Permission::can('settings')): ?>
+                                            <a href="<?= url('admin/settings#update-section') ?>" class="block text-center text-[10px] text-slate-500 hover:underline">
+                                                Buka Pengaturan Lengkap &rarr;
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </template>
 
                             <!-- Bila sudah up to date -->
-                            <template x-if="result && !result.has_update && !result.error">
+                            <template x-if="!updateSuccess && result && !result.has_update && !result.error">
                                 <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-700">
                                     <div class="flex items-center gap-1.5 text-emerald-700 font-bold">
                                         <span>✓</span>
                                         <span>Sistem Sudah Paling Baru</span>
                                     </div>
                                     <p class="text-[11px] text-slate-500" x-text="result.message"></p>
-                                    <a href="<?= url('admin/settings#update-section') ?>" class="block text-[11px] font-bold text-pepsi-blue hover:underline pt-1">
-                                        Kelola Cadangan &amp; Versi &rarr;
-                                    </a>
+                                    <div class="pt-1.5 flex items-center justify-between border-t border-slate-200/60 mt-2">
+                                        <button type="button" @click="runCheck()" class="text-[10px] font-bold text-pepsi-blue hover:underline cursor-pointer">
+                                            Periksa Ulang
+                                        </button>
+                                        <?php if (\App\Core\Permission::can('settings')): ?>
+                                            <a href="<?= url('admin/settings#update-section') ?>" class="text-[10px] font-bold text-slate-500 hover:underline">
+                                                Cadangan &amp; Versi &rarr;
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </template>
 
                             <!-- Bila error -->
-                            <template x-if="result && result.error">
-                                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-amber-900">
+                            <template x-if="!updateSuccess && result && result.error">
+                                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-amber-900">
                                     <span class="font-bold block text-xs">⚠️ Info Pengecekan</span>
                                     <p class="text-[11px]" x-text="result.error"></p>
+                                    <button type="button" @click="runCheck()" class="inline-block text-[10px] font-bold text-amber-800 hover:underline cursor-pointer">
+                                        Coba Lagi
+                                    </button>
                                 </div>
                             </template>
                         </div>
@@ -532,11 +572,14 @@
     document.addEventListener('alpine:init', () => {
         Alpine.data('topbarUpdateChecker', () => ({
             loading: false,
+            updating: false,
             showPopup: false,
             hasUpdate: false,
+            updateSuccess: false,
+            updateSuccessMessage: '',
             result: null,
             toggleCheck() {
-                if (this.showPopup && this.result) {
+                if (this.showPopup && (this.result || this.updateSuccess)) {
                     this.runCheck();
                 } else {
                     this.showPopup = true;
@@ -547,12 +590,28 @@
             },
             runCheck() {
                 this.loading = true;
+                this.result = null;
+                this.updateSuccess = false;
                 fetch('<?= url('admin/settings/check-update') ?>', {
                     headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
                     }
                 })
-                .then(res => res.json())
+                .then(async res => {
+                    const contentType = res.headers.get('content-type') || '';
+                    if (!res.ok) {
+                        if (contentType.includes('application/json')) {
+                            const errData = await res.json();
+                            throw new Error(errData.error || ('HTTP Error ' + res.status));
+                        }
+                        throw new Error('Server merespon dengan status ' + res.status);
+                    }
+                    if (!contentType.includes('application/json')) {
+                        throw new Error('Respon server bukan data JSON yang valid.');
+                    }
+                    return res.json();
+                })
                 .then(data => {
                     this.loading = false;
                     this.result = data;
@@ -560,7 +619,45 @@
                 })
                 .catch(err => {
                     this.loading = false;
-                    this.result = { error: 'Gagal terhubung ke server: ' + err.message };
+                    this.result = { error: 'Gagal memeriksa pembaruan: ' + err.message };
+                });
+            },
+            runApply() {
+                if (!confirm('Apakah Anda yakin ingin menerapkan pembaruan sekarang? Cadangan (backup) otomatis akan dibuat terlebih dahulu.')) {
+                    return;
+                }
+                this.updating = true;
+                fetch('<?= url('admin/settings/apply-update') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(async res => {
+                    const contentType = res.headers.get('content-type') || '';
+                    if (!res.ok) {
+                        if (contentType.includes('application/json')) {
+                            const errData = await res.json();
+                            throw new Error(errData.error || ('HTTP Error ' + res.status));
+                        }
+                        throw new Error('Server merespon dengan status ' + res.status);
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    this.updating = false;
+                    if (data && data.success) {
+                        this.hasUpdate = false;
+                        this.updateSuccess = true;
+                        this.updateSuccessMessage = data.message || 'Pembaruan berhasil diterapkan!';
+                    } else {
+                        this.result = { error: (data && data.message) ? data.message : 'Gagal menerapkan pembaruan.' };
+                    }
+                })
+                .catch(err => {
+                    this.updating = false;
+                    this.result = { error: 'Gagal menerapkan pembaruan: ' + err.message };
                 });
             }
         }));

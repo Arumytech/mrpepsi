@@ -45,6 +45,12 @@ abstract class Controller {
 
     public function requireAuth(array $roles = []): void {
         if (!isset($_SESSION['user'])) {
+            if (\App\Core\Permission::isAjax()) {
+                http_response_code(401);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'Sesi login telah berakhir. Silakan muat ulang halaman untuk login kembali.']);
+                exit;
+            }
             $_SESSION['flash_error'] = 'Silakan login terlebih dahulu.';
             $this->redirect('login');
             return;
@@ -64,6 +70,12 @@ abstract class Controller {
         }
 
         if (!empty($roles) && !in_array($role, $roles)) {
+            if (\App\Core\Permission::isAjax()) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'Akses ditolak. Akun Anda tidak memiliki izin untuk aksi ini.']);
+                exit;
+            }
             $_SESSION['flash_error'] = 'Akses ditolak. Anda tidak memiliki izin untuk halaman ini.';
             $this->redirect($role === 'cashier' ? 'pos' : 'admin');
             return;

@@ -220,6 +220,9 @@ $router->get('/admin/pos-control', [SettingController::class, 'posControl']);
 $router->get('/admin/settings/check-update', [SettingController::class, 'checkUpdate']);
 $router->post('/admin/settings/check-update', [SettingController::class, 'checkUpdate']);
 $router->post('/admin/settings/apply-update', [SettingController::class, 'applyUpdate']);
+$router->get('/admin/check-update', [SettingController::class, 'checkUpdate']);
+$router->post('/admin/check-update', [SettingController::class, 'checkUpdate']);
+$router->post('/admin/apply-update', [SettingController::class, 'applyUpdate']);
 $router->post('/admin/settings/backup', [SettingController::class, 'createBackup']);
 $router->get('/admin/settings/download-backup/{file}', [SettingController::class, 'downloadBackup']);
 

@@ -138,9 +138,28 @@ class Permission {
         return self::$userCache[$userId] = $keys;
     }
 
+    /**
+     * Cek apakah request berjalan adalah AJAX / JSON request.
+     */
+    public static function isAjax(): bool {
+        return (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+            || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+    }
+
     /** Petakan URI ke key menu (null = rute publik / tanpa proteksi). */
     public static function keyForPath(string $uri): ?string {
         $uri = '/' . trim($uri, '/');
+
+        // Rute utilitas & update sistem dikecualikan dari guard menu (diotorisasi oleh controller via requireAuth)
+        if (
+            $uri === '/admin/settings/check-update' ||
+            $uri === '/admin/check-update' ||
+            $uri === '/admin/settings/apply-update' ||
+            $uri === '/admin/apply-update'
+        ) {
+            return null;
+        }
+
         if (self::$pathIndex === null) {
             $index = [];
             foreach (self::menus() as $key => $menu) {
@@ -195,15 +214,40 @@ class Permission {
     public static function guardPath(string $uri): void {
         $key = self::resolveCurrentKey($uri);
         if ($key === null) {
-            return; // rute publik / tanpa proteksi
+            // Rute utilitas admin tanpa menu spesifik tetap membutuhkan login
+            $cleanUri = '/' . trim($uri, '/');
+            if (strpos($cleanUri, '/admin') === 0 && !isset($_SESSION['user'])) {
+                if (self::isAjax()) {
+                    http_response_code(401);
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['error' => 'Sesi login telah berakhir. Silakan muat ulang halaman untuk login kembali.']);
+                    exit;
+                }
+                $_SESSION['flash_error'] = 'Silakan login terlebih dahulu.';
+                header('Location: ' . url('login'));
+                exit;
+            }
+            return; // rute publik / tanpa proteksi menu
         }
         if (!isset($_SESSION['user'])) {
+            if (self::isAjax()) {
+                http_response_code(401);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['error' => 'Sesi login telah berakhir. Silakan muat ulang halaman untuk login kembali.']);
+                exit;
+            }
             $_SESSION['flash_error'] = 'Silakan login terlebih dahulu.';
             header('Location: ' . url('login'));
             exit;
         }
         if (self::can($key)) {
             return;
+        }
+        if (self::isAjax()) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'Akses ditolak. Akun Anda tidak memiliki izin untuk fitur ini.']);
+            exit;
         }
         $_SESSION['flash_error'] = 'Akses ditolak. Role Anda tidak diberi izin untuk menu ini.';
         header('Location: ' . url(self::landingFor($_SESSION['user']['role'])));

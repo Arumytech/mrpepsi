@@ -228,7 +228,7 @@ class SettingController extends Controller {
         $this->requireAuth(['admin']);
         $result = \App\Core\Updater::checkRemoteUpdate();
 
-        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        if (\App\Core\Permission::isAjax() || isset($_GET['ajax']) || isset($_POST['ajax'])) {
             $this->json($result);
             return;
         }
@@ -250,6 +250,11 @@ class SettingController extends Controller {
     public function applyUpdate(): void {
         $this->requireAuth(['admin']);
         $result = \App\Core\Updater::applyUpdate();
+
+        if (\App\Core\Permission::isAjax() || isset($_POST['ajax']) || isset($_GET['ajax'])) {
+            $this->json($result);
+            return;
+        }
 
         if ($result['success']) {
             $this->setFlash('success', $result['message']);
