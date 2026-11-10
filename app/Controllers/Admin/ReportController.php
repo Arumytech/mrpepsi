@@ -120,6 +120,21 @@ class ReportController extends Controller {
 
         $groupMap = $programModel->getReportGroupMap();
 
+        // Kamus master program untuk normalisasi judul kanonikal & pencegahan program duplikat (huruf kapital vs kecil)
+        $allPrograms = $programModel->all('price ASC, title ASC');
+        $progById    = [];
+        $progByCode  = [];
+        $progByTitle = [];
+        foreach ($allPrograms as $ap) {
+            $progById[(int)$ap['id']] = $ap;
+            if (!empty($ap['code'])) {
+                $progByCode[strtoupper(trim((string)$ap['code']))] = $ap;
+            }
+            if (!empty($ap['title'])) {
+                $progByTitle[strtolower(trim((string)$ap['title']))] = $ap;
+            }
+        }
+
         // Tiga bagian laporan keuangan kursus
         $groups = [
             'online'    => ['key' => 'online',    'label' => 'Program Kelas Online',  'total_fee' => 0.0, 'total_paid' => 0.0, 'total_due' => 0.0, 'count' => 0, 'total_programs' => 0, 'programs' => [], 'collection_rate' => 0],
@@ -166,8 +181,31 @@ class ReportController extends Controller {
             $studentGroupFee   = [];
             $studentTotalPrice = 0.0;
             foreach ($progs as $p) {
-                $pid = (int)($p['id'] ?? 0);
-                $grp = $groupMap[$pid] ?? 'offline';
+                $pid      = (int)($p['id'] ?? 0);
+                $code     = strtoupper(trim((string)($p['code'] ?? '')));
+                $rawTitle = trim((string)($p['title'] ?? ''));
+
+                // Cari data program master berdasarkan ID, kode, atau judul
+                $master = null;
+                if ($pid > 0 && isset($progById[$pid])) {
+                    $master = $progById[$pid];
+                } elseif ($code !== '' && isset($progByCode[$code])) {
+                    $master = $progByCode[$code];
+                } elseif ($rawTitle !== '' && isset($progByTitle[strtolower($rawTitle)])) {
+                    $master = $progByTitle[strtolower($rawTitle)];
+                }
+
+                // Tentukan judul kanonikal dan grup laporan
+                if ($master) {
+                    $canonicalTitle = (string)$master['title'];
+                    $progKey        = 'prog_' . $master['id'];
+                    $grp            = $groupMap[(int)$master['id']] ?? 'offline';
+                } else {
+                    $canonicalTitle = ucwords(strtolower($rawTitle ?: ($code ?: 'Lainnya')));
+                    $progKey        = 'title_' . strtolower($canonicalTitle);
+                    $grp            = $groupMap[$pid] ?? 'offline';
+                }
+
                 if (!isset($groups[$grp])) {
                     $grp = 'offline';
                 }
@@ -175,12 +213,11 @@ class ReportController extends Controller {
                 $studentGroupFee[$grp] = ($studentGroupFee[$grp] ?? 0) + $price;
                 $studentTotalPrice += $price;
 
-                $title = $p['title'] ?? ($p['code'] ?? 'Lainnya');
-                if (!isset($groups[$grp]['programs'][$title])) {
-                    $groups[$grp]['programs'][$title] = ['title' => $title, 'count' => 0, 'fee' => 0.0];
+                if (!isset($groups[$grp]['programs'][$progKey])) {
+                    $groups[$grp]['programs'][$progKey] = ['title' => $canonicalTitle, 'count' => 0, 'fee' => 0.0];
                 }
-                $groups[$grp]['programs'][$title]['count']++;
-                $groups[$grp]['programs'][$title]['fee'] += $price;
+                $groups[$grp]['programs'][$progKey]['count']++;
+                $groups[$grp]['programs'][$progKey]['fee'] += $price;
                 $groups[$grp]['total_programs']++;
             }
 
@@ -213,7 +250,9 @@ class ReportController extends Controller {
             $groups[$k]['collection_rate'] = $g['total_fee'] > 0
                 ? round(($g['total_paid'] / $g['total_fee']) * 100, 1)
                 : 0;
-            $groups[$k]['programs'] = array_values($g['programs']);
+            $progsList = array_values($g['programs']);
+            usort($progsList, fn($a, $b) => $b['count'] <=> $a['count'] ?: strcmp($a['title'], $b['title']));
+            $groups[$k]['programs'] = $progsList;
         }
 
         $this->view('admin.reports.finance', [
@@ -269,6 +308,22 @@ class ReportController extends Controller {
             'unpaid'         => 0,
         ];
 
+        // Kamus master program untuk normalisasi judul kanonikal & pencegahan program duplikat
+        $programModel = new Program();
+        $allPrograms  = $programModel->all('price ASC, title ASC');
+        $progById     = [];
+        $progByCode   = [];
+        $progByTitle  = [];
+        foreach ($allPrograms as $ap) {
+            $progById[(int)$ap['id']] = $ap;
+            if (!empty($ap['code'])) {
+                $progByCode[strtoupper(trim((string)$ap['code']))] = $ap;
+            }
+            if (!empty($ap['title'])) {
+                $progByTitle[strtolower(trim((string)$ap['title']))] = $ap;
+            }
+        }
+
         $programs = [];
         foreach ($rows as $r) {
             $fee  = (float)$r['total_fee'];
@@ -290,17 +345,40 @@ class ReportController extends Controller {
 
             $progs = json_decode($r['programs_json'] ?? '[]', true) ?: [];
             foreach ($progs as $p) {
-                $key = $p['title'] ?? ($p['code'] ?? 'Lainnya');
-                if (!isset($programs[$key])) {
-                    $programs[$key] = ['title' => $key, 'count' => 0, 'fee' => 0.0];
+                $pid      = (int)($p['id'] ?? 0);
+                $code     = strtoupper(trim((string)($p['code'] ?? '')));
+                $rawTitle = trim((string)($p['title'] ?? ''));
+
+                $master = null;
+                if ($pid > 0 && isset($progById[$pid])) {
+                    $master = $progById[$pid];
+                } elseif ($code !== '' && isset($progByCode[$code])) {
+                    $master = $progByCode[$code];
+                } elseif ($rawTitle !== '' && isset($progByTitle[strtolower($rawTitle)])) {
+                    $master = $progByTitle[strtolower($rawTitle)];
                 }
-                $programs[$key]['count']++;
-                $programs[$key]['fee'] += (float)($p['price'] ?? 0);
+
+                if ($master) {
+                    $canonicalTitle = (string)$master['title'];
+                    $progKey        = 'prog_' . $master['id'];
+                } else {
+                    $canonicalTitle = ucwords(strtolower($rawTitle ?: ($code ?: 'Lainnya')));
+                    $progKey        = 'title_' . strtolower($canonicalTitle);
+                }
+
+                if (!isset($programs[$progKey])) {
+                    $programs[$progKey] = ['title' => $canonicalTitle, 'count' => 0, 'fee' => 0.0];
+                }
+                $programs[$progKey]['count']++;
+                $programs[$progKey]['fee'] += (float)($p['price'] ?? 0);
             }
         }
         $course['collection_rate'] = $course['total_fee'] > 0
             ? round(($course['total_paid'] / $course['total_fee']) * 100, 1)
             : 0;
+
+        $progsCombined = array_values($programs);
+        usort($progsCombined, fn($a, $b) => $b['count'] <=> $a['count'] ?: strcmp($a['title'], $b['title']));
 
         // ── Pengeluaran Operasional ──
         $expenseModel = new Expense();
@@ -326,7 +404,7 @@ class ReportController extends Controller {
         $this->view('admin.reports.combined', [
             'rows'        => $rows,
             'course'      => $course,
-            'programs'    => array_values($programs),
+            'programs'    => $progsCombined,
             'expenses'    => $expenseSummary,
             'expenseCategories' => $expenseCategories,
             'combined'    => $combined,
