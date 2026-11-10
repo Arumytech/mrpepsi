@@ -365,6 +365,7 @@ class StudentController extends Controller {
         $studentId          = (int)($_POST['student_id'] ?? 0);
         $programTitles      = $_POST['program_title'] ?? [];
         $programCodes       = $_POST['program_code'] ?? [];
+        $programLevels      = $_POST['program_level'] ?? [];
         $programGrades      = $_POST['program_grade'] ?? [];
         $periodName         = trim($_POST['period_name'] ?? '');
         $graduatedAt        = trim($_POST['graduated_at'] ?? date('Y-m-d'));
@@ -377,10 +378,12 @@ class StudentController extends Controller {
         // Dukung input tunggal maupun banyak program sekaligus
         if (!is_array($programTitles))     $programTitles     = [$programTitles];
         if (!is_array($programCodes))      $programCodes      = [$programCodes];
+        if (!is_array($programLevels))     $programLevels     = [$programLevels];
         if (!is_array($programGrades))     $programGrades     = [$programGrades];
         if (!is_array($manualCertNoItems)) $manualCertNoItems = [$manualCertNoItems];
         $programTitles     = array_values($programTitles);
         $programCodes      = array_values($programCodes);
+        $programLevels     = array_values($programLevels);
         $programGrades     = array_values($programGrades);
         $manualCertNoItems = array_values($manualCertNoItems);
 
@@ -443,9 +446,15 @@ class StudentController extends Controller {
                 }
             }
 
+            $progLevel = trim((string)($programLevels[$i] ?? ''));
+            if ($progLevel === '') {
+                $progLevel = StudentGraduation::resolveLevel($title, $code);
+            }
+
             $gradData = [
                 'program_title' => $title,
                 'program_code'  => $code,
+                'program_level' => $progLevel,
                 'period_name'   => $periodName,
                 'graduated_at'  => $graduatedAt,
                 'grade'         => $progGrade,

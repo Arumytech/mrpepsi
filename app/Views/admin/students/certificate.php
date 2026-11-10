@@ -12,6 +12,14 @@ $legacyMap = ['A' => 'EXCELLENT', 'B' => 'VERY GOOD', 'C' => 'GOOD', 'D' => 'AVE
 if (isset($legacyMap[$grade])) $grade = $legacyMap[$grade];
 if ($grade === '') $grade = 'GOOD';
 
+// Resolusi jenjang level program (khusus sertifikat non-kid)
+$programLevel = trim((string)($grad['program_level'] ?? ''));
+if ($programLevel === '') {
+    $programLevel = \App\Models\StudentGraduation::resolveLevel($grad['program_title'] ?? '', $grad['program_code'] ?? '');
+} else {
+    $programLevel = \App\Models\StudentGraduation::normalizeLevelLabel($programLevel);
+}
+
 // Deteksi template: kid atau non-kid
 // Cek kolom is_kid (tersimpan di DB), fallback ke deteksi judul
 $isKid = (bool)(int)($grad['is_kid'] ?? 0);
@@ -352,7 +360,7 @@ $formattedDateId = str_replace(array_keys($bulanId), array_values($bulanId), $fo
             <!-- PROGRAM / LEVEL / Result (non-kid) -->
             <div class="program-info">
                 <div class="row"><span class="lbl">PROGRAM</span> : <?= sanitize($grad['program_title']) ?></div>
-                <div class="row"><span class="lbl">LEVEL</span> : <?= sanitize($grad['program_level'] ?? '') ?></div>
+                <div class="row"><span class="lbl">LEVEL</span> : <?= sanitize($programLevel) ?></div>
                 <div class="row"><span class="lbl">Result</span> : <?= sanitize($grade) ?></div>
                 <div class="row row-date">PARE,&nbsp; <?= $formattedDateId ?></div>
             </div>

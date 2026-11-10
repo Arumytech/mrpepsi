@@ -371,9 +371,16 @@ document.addEventListener('alpine:init', () => {
                                 </td>
                                 <td class="py-3 px-4">
                                     <div class="font-bold text-slate-800 text-xs"><?= sanitize($g['program_title']) ?></div>
-                                    <?php if ($g['program_code']): ?>
-                                        <div class="text-[10px] text-slate-400 font-mono mt-0.5">Kode: <?= sanitize($g['program_code']) ?></div>
-                                    <?php endif; ?>
+                                    <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                        <?php if (!empty($g['program_level'])): ?>
+                                            <span class="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-1.5 py-0.5 rounded">
+                                                <?= sanitize($g['program_level']) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if ($g['program_code']): ?>
+                                            <span class="text-[10px] text-slate-400 font-mono">Kode: <?= sanitize($g['program_code']) ?></span>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                                 <td class="py-3 px-4">
                                     <div class="font-bold text-slate-700"><?= sanitize($g['period_name'] ?: '-') ?></div>
@@ -443,7 +450,12 @@ document.addEventListener('alpine:init', () => {
                         <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] space-y-1">
                             <div class="flex justify-between">
                                 <span class="text-slate-400 font-semibold">Program:</span>
-                                <span class="font-bold text-slate-800 text-right"><?= sanitize($g['program_title']) ?></span>
+                                <div class="text-right">
+                                    <span class="font-bold text-slate-800 block"><?= sanitize($g['program_title']) ?></span>
+                                    <?php if (!empty($g['program_level'])): ?>
+                                        <span class="text-[10px] font-bold text-indigo-600 block"><?= sanitize($g['program_level']) ?></span>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-slate-400 font-semibold">Periode:</span>

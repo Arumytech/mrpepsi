@@ -15,7 +15,7 @@ class DatabaseMigrator {
      * Versi skema saat ini. Naikkan versi ini jika ada penambahan tabel atau kolom baru
      * agar migrasi otomatis berjalan saat update kode dideploy.
      */
-    public const SCHEMA_VERSION = '2026.11.07.1';
+    public const SCHEMA_VERSION = '2026.11.10.1';
 
     /**
      * Jalankan migrasi otomatis jika schema_version di database belum sesuai.
@@ -252,6 +252,7 @@ class DatabaseMigrator {
             `certificate_no` VARCHAR(60) NOT NULL UNIQUE,
             `program_title` VARCHAR(150) NOT NULL,
             `program_code` VARCHAR(30) NOT NULL DEFAULT '',
+            `program_level` VARCHAR(100) NULL,
             `period_name` VARCHAR(100) NOT NULL DEFAULT '',
             `graduated_at` DATE NOT NULL,
             `final_score` DECIMAL(5,2) NULL,
@@ -513,6 +514,46 @@ class DatabaseMigrator {
         if (!self::columnExists($pdo, 'student_graduations', 'is_kid')) {
             $pdo->exec("ALTER TABLE `student_graduations` ADD COLUMN `is_kid` TINYINT(1) NOT NULL DEFAULT 0 AFTER `grade`");
         }
+
+        // Kolom program_level di student_graduations
+        if (!self::columnExists($pdo, 'student_graduations', 'program_level')) {
+            $pdo->exec("ALTER TABLE `student_graduations` ADD COLUMN `program_level` VARCHAR(100) NULL AFTER `program_code`");
+        }
+
+        // Backfill program_level untuk sertifikat lama yang masih kosong
+        try {
+            $emptyGrads = $pdo->query("SELECT id, program_title, program_code FROM `student_graduations` WHERE `program_level` IS NULL OR `program_level` = ''")->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($emptyGrads)) {
+                $updStmt = $pdo->prepare("UPDATE `student_graduations` SET `program_level` = ? WHERE `id` = ?");
+                foreach ($emptyGrads as $eg) {
+                    $lvl = \App\Models\StudentGraduation::resolveLevel($eg['program_title'] ?? '', $eg['program_code'] ?? '');
+                    if ($lvl !== '') {
+                        $updStmt->execute([$lvl, $eg['id']]);
+                    }
+                }
+            }
+        } catch (Throwable $e) {}
+
+        // Standardisasi level_label di tabel programs (contoh: 'Pre-Advanced' -> 'Pre-Advanced Level')
+        try {
+            $pdo->exec("UPDATE `programs` SET `level_label` = 'Pre-Advanced Level' WHERE `level_label` = 'Pre-Advanced'");
+        } catch (Throwable $e) {}
+
+        // Pastikan program Speaking for IELTS tersedia di tabel programs jika belum ada
+        try {
+            $hasSFI = (int)$pdo->query("SELECT COUNT(*) FROM `programs` WHERE `code` = 'SFI' OR LOWER(`title`) = 'speaking for ielts'")->fetchColumn();
+            if ($hasSFI === 0) {
+                $stmtIns = $pdo->prepare("INSERT INTO `programs` 
+                    (`code`, `title`, `level_category`, `orientation`, `level_label`, `price`, `english_ratio`, `description`, `syllabus`, `final_exam`, `is_new`, `is_active`) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+                $stmtIns->execute([
+                    'SFI', 'Speaking for IELTS', 'advanced', 'ielts', 'Advanced Level',
+                    180000, '80%', 'Program intensif IELTS Speaking untuk menguasai Part 1, 2, dan 3.',
+                    json_encode(['IELTS Speaking Part 1, 2, 3 Strategies', 'Fluency & Coherence', 'Lexical Resource & Academic Vocabulary', 'Real Exam Simulation']),
+                    'Full Simulation Part 1, 2, and 3', 0
+                ]);
+            }
+        } catch (Throwable $e) {}
 
         // Kolom salary_month & is_kids di payrolls
         if (!self::columnExists($pdo, 'payrolls', 'salary_month')) {
@@ -807,7 +848,7 @@ class DatabaseMigrator {
                 'title' => 'Grammar for Speaking 2',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'speaking',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 160000,
                 'english_ratio' => '70%',
                 'description' => 'Tingkat mahir tata bahasa lisan untuk diskusi akademis dan formal.',
@@ -825,7 +866,7 @@ class DatabaseMigrator {
                 'title' => 'Snap Chat',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'speaking',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 170000,
                 'english_ratio' => '70%',
                 'description' => 'Program adaptif baru termasuk pengenalan tes modern PTE & Duolingo.',
@@ -843,7 +884,7 @@ class DatabaseMigrator {
                 'title' => 'Smash Speak',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'speaking',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 170000,
                 'english_ratio' => '70%',
                 'description' => 'Melatih kemampuan public speaking mendalam mengenai isu-isu hangat terkini.',
@@ -861,7 +902,7 @@ class DatabaseMigrator {
                 'title' => 'Active Speaking',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'speaking',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 170000,
                 'english_ratio' => '70%',
                 'description' => 'Diskusi kritis isu global & lokal untuk mempertajam kelancaran komunikasi.',
@@ -879,7 +920,7 @@ class DatabaseMigrator {
                 'title' => 'Vocabulary for IELTS',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'ielts',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 170000,
                 'english_ratio' => '80%',
                 'description' => 'Penguasaan kosakata khusus bertema IELTS untuk menaikkan band score.',
@@ -897,7 +938,7 @@ class DatabaseMigrator {
                 'title' => 'Speaking for IELTS (General Training)',
                 'level_category' => 'pre-advanced',
                 'orientation' => 'ielts',
-                'level_label' => 'Pre-Advanced',
+                'level_label' => 'Pre-Advanced Level',
                 'price' => 170000,
                 'english_ratio' => '80%',
                 'description' => 'Persiapan simulasi tes IELTS Speaking untuk jalur General Training.',
