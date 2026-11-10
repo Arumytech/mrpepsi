@@ -554,6 +554,95 @@ class Updater {
     }
 
     /**
+     * Hapus file cadangan tertentu dari folder `bakup/`.
+     */
+    public static function deleteBackup(string $filename): bool {
+        $filename = basename($filename);
+        $filePath = BASE_PATH . '/bakup/' . $filename;
+        if (file_exists($filePath) && strtolower(substr($filename, -4)) === '.zip') {
+            return @unlink($filePath);
+        }
+        return false;
+    }
+
+    /**
+     * Memulihkan (restore) database dari file cadangan .zip atau .sql.
+     *
+     * @param string $sourcePath Path absolut ke file .zip atau .sql
+     * @return array ['success' => bool, 'message' => string, 'error' => string]
+     */
+    public static function restoreBackup(string $sourcePath): array {
+        if (!file_exists($sourcePath)) {
+            return ['success' => false, 'error' => 'File cadangan tidak ditemukan di server.'];
+        }
+
+        $ext = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+        $sqlContent = '';
+
+        if ($ext === 'zip') {
+            if (!class_exists('ZipArchive')) {
+                return ['success' => false, 'error' => 'Ekstensi PHP ZipArchive tidak aktif pada server PHP.'];
+            }
+            $zip = new \ZipArchive();
+            if ($zip->open($sourcePath) !== true) {
+                return ['success' => false, 'error' => 'Gagal membuka file arsip ZIP cadangan.'];
+            }
+
+            // Cari database_backup.sql atau file .sql lainnya di dalam zip
+            $sqlContent = $zip->getFromName('database_backup.sql');
+            if ($sqlContent === false || trim($sqlContent) === '') {
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $stat = $zip->statIndex($i);
+                    if ($stat && str_ends_with(strtolower($stat['name']), '.sql')) {
+                        $sqlContent = $zip->getFromIndex($i);
+                        break;
+                    }
+                }
+            }
+            $zip->close();
+
+            if ($sqlContent === false || trim((string)$sqlContent) === '') {
+                return ['success' => false, 'error' => 'File database_backup.sql tidak ditemukan di dalam arsip ZIP.'];
+            }
+        } elseif ($ext === 'sql') {
+            $sqlContent = file_get_contents($sourcePath);
+            if ($sqlContent === false || trim($sqlContent) === '') {
+                return ['success' => false, 'error' => 'File SQL kosong atau tidak dapat dibaca.'];
+            }
+        } else {
+            return ['success' => false, 'error' => 'Format file cadangan harus berupa .zip atau .sql.'];
+        }
+
+        // Buat cadangan pengaman (safety checkpoint) sebelum ditimpa
+        self::createBackup('pre_restore');
+
+        // Eksekusi SQL dump ke database
+        try {
+            $pdo = Database::getConnection();
+            $pdo->exec("SET FOREIGN_KEY_CHECKS = 0;");
+            $pdo->exec($sqlContent);
+            $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+
+            // Sinkronkan skema jika ada penyesuaian skema migrator terbaru
+            DatabaseMigrator::autoMigrateIfNeeded($pdo);
+
+            return [
+                'success' => true,
+                'message' => 'Database berhasil dipulihkan secara sempurna! Cadangan pengaman sebelum pemulihan juga telah dibuat otomatis di folder bakup/.'
+            ];
+        } catch (\Throwable $e) {
+            try {
+                $pdo = Database::getConnection();
+                $pdo->exec("SET FOREIGN_KEY_CHECKS = 1;");
+            } catch (\Throwable $ignored) {}
+            return [
+                'success' => false,
+                'error'   => 'Terjadi error saat mengeksekusi SQL: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Hasilkan string dump SQL seluruh tabel dan data di database.
      */
     private static function dumpDatabaseSql(PDO $pdo): string {

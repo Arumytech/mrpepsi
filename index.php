@@ -225,6 +225,9 @@ $router->post('/admin/check-update', [SettingController::class, 'checkUpdate']);
 $router->post('/admin/apply-update', [SettingController::class, 'applyUpdate']);
 $router->post('/admin/settings/backup', [SettingController::class, 'createBackup']);
 $router->get('/admin/settings/download-backup/{file}', [SettingController::class, 'downloadBackup']);
+$router->post('/admin/settings/restore-backup', [SettingController::class, 'restoreBackup']);
+$router->post('/admin/settings/upload-restore', [SettingController::class, 'uploadRestoreBackup']);
+$router->post('/admin/settings/delete-backup', [SettingController::class, 'deleteBackup']);
 
 // Manajemen User & Akun (Admin / Kasir)
 $router->get('/admin/users', [UserController::class, 'index']);

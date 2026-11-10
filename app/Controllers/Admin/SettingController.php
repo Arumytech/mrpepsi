@@ -305,4 +305,90 @@ class SettingController extends Controller {
         readfile($filePath);
         exit;
     }
+
+    /**
+     * Pulihkan (restore) database dari file cadangan yang tersimpan di folder `bakup/`.
+     */
+    public function restoreBackup(): void {
+        $this->requireAuth(['admin']);
+        $filename = basename((string)($_POST['filename'] ?? ''));
+        $filePath = BASE_PATH . '/bakup/' . $filename;
+
+        if (empty($filename) || !file_exists($filePath)) {
+            $this->setFlash('error', 'File cadangan yang dipilih tidak ditemukan.');
+            $this->redirect('admin/settings#update-section');
+            return;
+        }
+
+        $result = \App\Core\Updater::restoreBackup($filePath);
+        if ($result['success']) {
+            $this->setFlash('success', $result['message']);
+        } else {
+            $this->setFlash('error', 'Gagal memulihkan cadangan: ' . ($result['error'] ?? 'Terjadi kesalahan.'));
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
+
+    /**
+     * Upload file cadangan (.zip atau .sql) dari komputer dan langsung pulihkan.
+     */
+    public function uploadRestoreBackup(): void {
+        $this->requireAuth(['admin']);
+
+        if (!isset($_FILES['backup_file']) || $_FILES['backup_file']['error'] !== UPLOAD_ERR_OK) {
+            $this->setFlash('error', 'Pilih file cadangan (.zip atau .sql) untuk diunggah.');
+            $this->redirect('admin/settings#update-section');
+            return;
+        }
+
+        $file     = $_FILES['backup_file'];
+        $origName = basename($file['name']);
+        $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['zip', 'sql'], true)) {
+            $this->setFlash('error', 'Format file tidak didukung. Harap unggah file arsip .zip atau file database .sql.');
+            $this->redirect('admin/settings#update-section');
+            return;
+        }
+
+        $backupDir = BASE_PATH . '/bakup';
+        if (!is_dir($backupDir)) {
+            @mkdir($backupDir, 0755, true);
+        }
+
+        $targetName = 'uploaded_' . date('Y-m-d_His') . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '', $origName);
+        $targetPath = $backupDir . '/' . $targetName;
+
+        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+            $this->setFlash('error', 'Gagal menyimpan file cadangan yang diunggah.');
+            $this->redirect('admin/settings#update-section');
+            return;
+        }
+
+        $result = \App\Core\Updater::restoreBackup($targetPath);
+        if ($result['success']) {
+            $this->setFlash('success', "File '{$origName}' berhasil diunggah dan database telah berhasil dipulihkan!");
+        } else {
+            $this->setFlash('error', 'Gagal memulihkan database dari file: ' . ($result['error'] ?? ''));
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
+
+    /**
+     * Hapus file cadangan dari folder `bakup/`.
+     */
+    public function deleteBackup(): void {
+        $this->requireAuth(['admin']);
+        $filename = basename((string)($_POST['filename'] ?? ''));
+
+        if (!empty($filename) && \App\Core\Updater::deleteBackup($filename)) {
+            $this->setFlash('success', "File cadangan '{$filename}' berhasil dihapus.");
+        } else {
+            $this->setFlash('error', "Gagal menghapus file cadangan.");
+        }
+
+        $this->redirect('admin/settings#update-section');
+    }
 }

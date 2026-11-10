@@ -351,7 +351,7 @@
             <?php else: ?>
                 <div class="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden text-xs bg-slate-50/50">
                     <?php foreach (array_slice($backups, 0, 5) as $b): ?>
-                    <div class="p-3 bg-white flex items-center justify-between gap-3 hover:bg-slate-50 transition">
+                    <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition">
                         <div class="flex items-center gap-2.5 min-w-0">
                             <span class="text-base">📦</span>
                             <div class="min-w-0">
@@ -363,13 +363,61 @@
                                 </span>
                             </div>
                         </div>
-                        <a href="<?= url('admin/settings/download-backup/' . urlencode($b['filename'])) ?>" class="shrink-0 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] transition">
-                            Unduh ZIP &darr;
-                        </a>
+                        <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                            <!-- Unduh ZIP -->
+                            <a href="<?= url('admin/settings/download-backup/' . urlencode($b['filename'])) ?>" title="Unduh arsip ZIP ke komputer" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[11px] transition">
+                                Unduh &darr;
+                            </a>
+
+                            <!-- Pulihkan / Restore -->
+                            <form action="<?= url('admin/settings/restore-backup') ?>" method="POST" class="inline"
+                                  onsubmit="return confirm('PERINGATAN: Pulihkan database dari file cadangan:\n<?= addslashes($b['filename']) ?>?\n\n1. Seluruh data saat ini akan digantikan oleh isi cadangan ini.\n2. Sistem otomatis membuat cadangan pengaman (safety checkpoint) terlebih dahulu.\n\nLanjutkan pemulihan database?')">
+                                <input type="hidden" name="filename" value="<?= sanitize($b['filename']) ?>">
+                                <button type="submit" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-[11px] shadow-xs transition flex items-center gap-1 cursor-pointer" title="Pulihkan database dari file ini">
+                                    <span>🔄</span> Pulihkan
+                                </button>
+                            </form>
+
+                            <!-- Hapus Cadangan -->
+                            <form action="<?= url('admin/settings/delete-backup') ?>" method="POST" class="inline"
+                                  onsubmit="return confirm('Hapus file cadangan <?= addslashes($b['filename']) ?> dari folder bakup/?')">
+                                <input type="hidden" name="filename" value="<?= sanitize($b['filename']) ?>">
+                                <button type="submit" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer" title="Hapus file cadangan">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </form>
+                        </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+
+            <!-- Form Unggah & Pulihkan Cadangan dari Komputer -->
+            <div class="mt-4 p-4 bg-gradient-to-r from-amber-50/70 via-indigo-50/40 to-slate-50 rounded-2xl border border-amber-200/80 space-y-3">
+                <div class="flex items-start gap-2.5">
+                    <span class="text-xl">📤</span>
+                    <div>
+                        <h4 class="font-extrabold text-slate-800 text-xs">Unggah &amp; Pulihkan Cadangan (.zip / .sql)</h4>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            Punya file cadangan dari komputer lain? Unggah file arsip ZIP cadangan atau file database SQL (<code class="font-mono bg-white px-1 py-0.5 rounded border border-amber-200">.sql</code>) untuk dipulihkan langsung ke sistem.
+                        </p>
+                    </div>
+                </div>
+
+                <form action="<?= url('admin/settings/upload-restore') ?>" method="POST" enctype="multipart/form-data" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1"
+                      onsubmit="return confirm('PERINGATAN: Pulihkan database dari file yang diunggah?\n\n1. Seluruh data saat ini akan digantikan oleh data dari file cadangan.\n2. Sistem otomatis membuat cadangan pengaman (safety checkpoint) sebelum pemulihan dilakukan.\n\nApakah Anda yakin ingin memulihkan sekarang?')">
+                    <input type="file" name="backup_file" accept=".zip,.sql" required
+                           class="flex-1 text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-white file:text-slate-700 hover:file:bg-slate-100 file:cursor-pointer border border-amber-300 rounded-xl p-1 bg-white">
+                    <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs shadow-sm transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+                        <span>🔄</span> Unggah &amp; Pulihkan
+                    </button>
+                </form>
+            </div>
+
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-500 flex items-center justify-between flex-wrap gap-2">
+                <span>📁 Folder fisik cadangan di komputer server: <code class="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-700">c:\laragon\www\mrpepsi\bakup\</code></span>
+                <span class="text-slate-400">Database juga bisa di-restore manual via HeidiSQL / phpMyAdmin Laragon</span>
+            </div>
         </div>
     </div>
 

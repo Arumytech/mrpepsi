@@ -26,6 +26,11 @@ $totalTables = count($allTables);
         <div class="text-xs text-red-800 space-y-1">
             <p class="font-bold">Data yang dihapus tidak dapat dikembalikan!</p>
             <p>Isi tabel terpilih akan dikosongkan total beserta penomoran otomatisnya. Pastikan Anda sudah memiliki cadangan (backup) bila perlu. Tabel akun &amp; pengaturan sistem selalu dilindungi.</p>
+            <div class="pt-1">
+                <a href="<?= url('admin/settings#update-section') ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl border border-red-200 text-[11px] shadow-2xs transition">
+                    <span>💾</span> Buka Menu Cadangan (Backup &amp; Restore) &rarr;
+                </a>
+            </div>
         </div>
     </div>
 
